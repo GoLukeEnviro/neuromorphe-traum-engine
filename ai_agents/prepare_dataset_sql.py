@@ -12,6 +12,7 @@ import hashlib
 from pathlib import Path
 import json
 from laion_clap import CLAP_Module
+from sklearn.cluster import KMeans
 
 # Logging-Konfiguration
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -41,6 +42,9 @@ class NeuroAnalyzer:
         
         # Ziel-Kategorien definieren
         self.categories = ["kick", "bass", "synth", "hihat", "snare", "percussion", "fx", "atmo"]
+        
+        # KMeans-Modell für Cluster-basierte Kategorisierung
+        self.kmeans = KMeans(n_clusters=len(self.categories), random_state=42)
 
     def init_db(self):
         """
@@ -100,6 +104,10 @@ class NeuroAnalyzer:
             logging.warning("Keine Audiodateien gefunden!")
             return
         
+        # KMeans-Training vor der parallelen Verarbeitung
+        logging.info("Trainiere KMeans-Modell für Cluster-basierte Kategorisierung...")
+        self._train_kmeans(audio_files)
+        
         # Parallele Verarbeitung
         processed_count = 0
         quarantined_count = 0
@@ -124,6 +132,94 @@ class NeuroAnalyzer:
                     logging.error(f"Fehler bei Verarbeitung von {file_path}: {e}")
         
         logging.info(f"Neuro-Analyse abgeschlossen. Verarbeitet: {processed_count}, Quarantäne: {quarantined_count}")
+
+    def _train_kmeans(self, audio_files: List[str]):
+        """
+        Trainiert das KMeans-Modell mit Features aus allen Audiodateien.
+        
+        Args:
+            audio_files (List[str]): Liste aller zu verarbeitenden Audiodateien
+        """
+        feature_pairs = []
+        
+        for file_path in audio_files:
+            try:
+                # Audio laden (nur für Feature-Extraktion)
+                y, sr = librosa.load(file_path, sr=48000, duration=10.0)  # Nur erste 10s für Training
+                
+                # Grundlegende Qualitätsprüfung
+                if len(y) / sr < 0.5:
+                    continue
+                
+                # Features extrahieren
+                features = self._extract_features(y, sr)
+                
+                # Nur spectral_centroid und rms für Clustering verwenden
+                feature_pairs.append([features['spectral_centroid'], features['rms']])
+                
+            except Exception as e:
+                logging.debug(f"Fehler beim Laden von {file_path} für KMeans-Training: {e}")
+                continue
+        
+        if len(feature_pairs) < len(self.categories):
+            logging.warning(f"Zu wenige Features für KMeans-Training: {len(feature_pairs)} < {len(self.categories)}")
+            # Fallback: Verwende Dummy-Features
+            feature_pairs = [[1000.0 + i*500, 0.1 + i*0.05] for i in range(len(self.categories))]
+        
+        # KMeans-Modell trainieren
+        feature_array = np.array(feature_pairs)
+        self.kmeans.fit(feature_array)
+        
+        logging.info(f"KMeans-Modell trainiert mit {len(feature_pairs)} Feature-Paaren")
+
+    def _extract_features(self, y: np.ndarray, sr: int) -> Dict[str, float]:
+        """
+        Extrahiert erweiterte Audio-Features für Qualitätskontrolle und Clustering.
+        
+        Args:
+            y (np.ndarray): Audio-Array
+            sr (int): Abtastrate
+            
+        Returns:
+            Dict[str, float]: Dictionary mit berechneten Features
+        """
+        try:
+            # Spektraler Schwerpunkt
+            spectral_centroid = float(np.mean(librosa.feature.spectral_centroid(y=y, sr=sr)))
+            
+            # Nulldurchgangsrate
+            zero_crossing_rate = float(np.mean(librosa.feature.zero_crossing_rate(y)))
+            
+            # RMS-Energie
+            rms = float(np.mean(librosa.feature.rms(y=y)))
+            
+            # Spektraler Rolloff
+            spectral_rolloff = float(np.mean(librosa.feature.spectral_rolloff(y=y, sr=sr)))
+            
+            # Spektrale Bandbreite
+            spectral_bandwidth = float(np.mean(librosa.feature.spectral_bandwidth(y=y, sr=sr)))
+            
+            features = {
+                'spectral_centroid': spectral_centroid,
+                'zero_crossing_rate': zero_crossing_rate,
+                'rms': rms,
+                'spectral_rolloff': spectral_rolloff,
+                'spectral_bandwidth': spectral_bandwidth
+            }
+            
+            logging.debug(f"Features extrahiert: {features}")
+            return features
+            
+        except Exception as e:
+            logging.error(f"Fehler bei Feature-Extraktion: {e}")
+            # Fallback mit Standardwerten
+            return {
+                'spectral_centroid': 1000.0,
+                'zero_crossing_rate': 0.1,
+                'rms': 0.1,
+                'spectral_rolloff': 2000.0,
+                'spectral_bandwidth': 1000.0
+            }
 
     def _process_file(self, file_path: str) -> Optional[Dict]:
         """
@@ -172,9 +268,29 @@ class NeuroAnalyzer:
             tempo, beats = librosa.beat.beat_track(y=y_resampled, sr=48000)
             bpm = float(tempo)
             
+            # Erweiterte Feature-Extraktion
+            features = self._extract_features(y_resampled, 48000)
+            
+            # Erweiterte Qualitätskontrolle
+            if features['spectral_centroid'] < 100:
+                logging.warning(f"Spektraler Schwerpunkt zu niedrig ({features['spectral_centroid']:.2f}): {file_path}")
+                quarantine_dir = "processed_database/quarantine"
+                os.makedirs(quarantine_dir, exist_ok=True)
+                quarantine_path = os.path.join(quarantine_dir, os.path.basename(file_path))
+                shutil.move(file_path, quarantine_path)
+                return {'quarantined': True, 'reason': 'low_spectral_centroid', 'value': features['spectral_centroid']}
+            
+            if features['rms'] < 0.001:
+                logging.warning(f"RMS zu niedrig ({features['rms']:.6f}): {file_path}")
+                quarantine_dir = "processed_database/quarantine"
+                os.makedirs(quarantine_dir, exist_ok=True)
+                quarantine_path = os.path.join(quarantine_dir, os.path.basename(file_path))
+                shutil.move(file_path, quarantine_path)
+                return {'quarantined': True, 'reason': 'low_rms', 'value': features['rms']}
+            
             # Semantische Analyse mit CLAP
             clap_tags = self._get_clap_tags(y_resampled)
-            category = self._get_category(file_path)
+            category = self._get_category(file_path, features)
             
             # Eindeutige ID mit Kategorie generieren
             timestamp = int(datetime.now().timestamp())
@@ -188,7 +304,7 @@ class NeuroAnalyzer:
                 'key': None,  # Wird später implementiert
                 'category': category,
                 'tags': json.dumps(clap_tags),
-                'features': None,  # Wird später implementiert
+                'features': json.dumps(features),
                 'quality_ok': True,
                 'user_rating': None,
                 'imported_at': datetime.now().isoformat()
@@ -247,12 +363,14 @@ class NeuroAnalyzer:
             # Fallback: Erste drei Tags aus der Liste
             return self.tags_candidates[:3]
     
-    def _get_category(self, file_path: str) -> str:
+    def _get_category(self, file_path: str, features: Dict[str, float]) -> str:
         """
-        Bestimmt die Kategorie eines Stems basierend auf Dateinamen-Heuristik.
+        Bestimmt die Kategorie eines Stems basierend auf Dateinamen-Heuristik
+        mit Cluster-basierter Fallback-Logik.
         
         Args:
             file_path (str): Der Pfad zur Originaldatei
+            features (Dict[str, float]): Extrahierte Audio-Features
             
         Returns:
             str: Die ermittelte Kategorie
@@ -265,9 +383,23 @@ class NeuroAnalyzer:
                 logging.debug(f"Kategorie '{category}' erkannt in: {filename_lower}")
                 return category
         
-        # Fallback: unknown
-        logging.debug(f"Keine Kategorie erkannt in: {filename_lower}, verwende 'unknown'")
-        return "unknown"
+        # Cluster-basierte Fallback-Logik
+        try:
+            # Verwende spectral_centroid und rms für Clustering
+            feature_vector = np.array([[features['spectral_centroid'], features['rms']]])
+            
+            # Vorhersage mit trainiertem KMeans-Modell
+            cluster_prediction = self.kmeans.predict(feature_vector)[0]
+            predicted_category = self.categories[cluster_prediction]
+            
+            logging.debug(f"Cluster-basierte Kategorie '{predicted_category}' für: {filename_lower}")
+            return predicted_category
+            
+        except Exception as e:
+            logging.error(f"Fehler bei Cluster-Vorhersage: {e}")
+            # Fallback: unknown
+            logging.debug(f"Keine Kategorie erkannt in: {filename_lower}, verwende 'unknown'")
+            return "unknown"
 
     def _insert_meta(self, metadata: Dict):
         """

@@ -2,9 +2,10 @@
 # Core audio processing and analysis libraries
 
 librosa>=0.10.0
-numpy>=1.24.0
+numpy>=1.21.0
 soundfile>=0.12.0
 laion-clap
+scikit-learn>=1.0.0
 
 # Note: The following are built-in Python libraries and don't need installation:
 # - sqlite3 (built-in)
