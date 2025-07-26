@@ -1,0 +1,150 @@
+# Neuromorphe Traum-Engine v2.0 - Git Ignore File
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+PIPFILE.lock
+
+# Virtual Environment
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Audio Files (Raw Construction Kits)
+raw_construction_kits/
+!raw_construction_kits/.gitkeep
+
+# Processed Database and Audio
+processed_database/
+!processed_database/.gitkeep
+processed_databasequarantine/
+processed_databasestems/
+
+# Database Files
+*.db
+*.sqlite
+*.sqlite3
+
+# Audio Files (General)
+*.wav
+*.mp3
+*.flac
+*.aiff
+*.m4a
+*.ogg
+*.wma
+
+# Ableton Live Files
+*.akp
+*.als
+*.alc
+*.adg
+*.adv
+*.asd
+
+# Temporary Files
+*.tmp
+*.temp
+*.log
+*.cache
+
+# OS Generated Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Machine Learning Models
+*.pkl
+*.pickle
+*.joblib
+*.h5
+*.hdf5
+*.pt
+*.pth
+*.onnx
+
+# Analysis Results
+analysis_results/
+feature_cache/
+model_cache/
+
+# Test Files (Keep structure but ignore content)
+test_*.wav
+test_*.mp3
+!test_implementation.py
+
+# Configuration Files with Secrets
+.env
+.env.local
+.env.production
+config.ini
+secrets.json
+
+# Jupyter Notebooks Checkpoints
+.ipynb_checkpoints/
+
+# Coverage Reports
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Documentation Build
+docs/_build/
+
+# Large Data Files
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# Backup Files
+*.bak
+*.backup
+*.old
+
+# Node.js (if any frontend components)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Requirements backup
+requirements.txt.bak
