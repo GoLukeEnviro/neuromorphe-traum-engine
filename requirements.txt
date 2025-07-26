@@ -5,7 +5,9 @@ librosa>=0.10.0
 numpy>=1.21.0
 soundfile>=0.12.0
 laion-clap
+torch>=1.9.0
 scikit-learn>=1.0.0
+tqdm
 
 # Note: The following are built-in Python libraries and don't need installation:
 # - sqlite3 (built-in)
