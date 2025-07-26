@@ -10,6 +10,8 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from typing import Optional, Dict, List
 import hashlib
 from pathlib import Path
+import json
+from laion_clap import CLAP_Module
 
 # Logging-Konfiguration
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -27,7 +29,18 @@ class NeuroAnalyzer:
         """
         logging.info("Initialisiere Neuro-Analysator...")
         self.input_dir = input_dir
-        # Spätere Initialisierung von CLAP, KMeans etc. kommt hier hin
+        
+        # LAION-CLAP-Modell laden
+        logging.info("Lade LAION-CLAP-Modell. Dies kann einen Moment dauern...")
+        self.clap_model = CLAP_Module(enable_fusion=False)
+        self.clap_model.load_ckpt()  # Lädt Standard-Checkpoint
+        
+        # Semantische Tag-Kandidaten definieren
+        self.tags_candidates = ["dark", "punchy", "hypnotic", "industrial", "gritty", 
+                               "atmospheric", "driving", "melodic", "percussive", "minimal"]
+        
+        # Ziel-Kategorien definieren
+        self.categories = ["kick", "bass", "synth", "hihat", "snare", "percussion", "fx", "atmo"]
 
     def init_db(self):
         """
@@ -159,14 +172,22 @@ class NeuroAnalyzer:
             tempo, beats = librosa.beat.beat_track(y=y_resampled, sr=48000)
             bpm = float(tempo)
             
+            # Semantische Analyse mit CLAP
+            clap_tags = self._get_clap_tags(y_resampled)
+            category = self._get_category(file_path)
+            
+            # Eindeutige ID mit Kategorie generieren
+            timestamp = int(datetime.now().timestamp())
+            stem_id = f"{category}_{timestamp}_{file_hash[:4]}"
+            
             # Metadaten zusammenstellen
             metadata = {
-                'id': file_hash,
+                'id': stem_id,
                 'path': standardized_path,
                 'bpm': bpm,
                 'key': None,  # Wird später implementiert
-                'category': None,  # Wird später implementiert
-                'tags': None,  # Wird später implementiert
+                'category': category,
+                'tags': json.dumps(clap_tags),
                 'features': None,  # Wird später implementiert
                 'quality_ok': True,
                 'user_rating': None,
@@ -179,6 +200,74 @@ class NeuroAnalyzer:
         except Exception as e:
             logging.error(f"Fehler bei Verarbeitung von {file_path}: {e}")
             return None
+
+    def _get_clap_tags(self, audio_array: np.ndarray) -> List[str]:
+        """
+        Verwendet LAION-CLAP um semantische Tags für ein Audio-Array zu generieren.
+        
+        Args:
+            audio_array (np.ndarray): Das Audio-Array (48kHz, mono)
+            
+        Returns:
+            List[str]: Liste der Top 3 passendsten Tags
+        """
+        try:
+            # Sicherstellen, dass das Audio-Array die richtige Form hat
+            if len(audio_array.shape) == 1:
+                # Mono-Audio: Füge Batch-Dimension hinzu
+                audio_data = audio_array.reshape(1, -1)
+            else:
+                audio_data = audio_array
+            
+            # Audio-Embedding berechnen
+            audio_embed = self.clap_model.get_audio_embedding_from_data(
+                x=audio_data, use_tensor=False
+            )
+            
+            # Text-Embeddings für alle Kandidaten-Tags berechnen
+            text_embeds = self.clap_model.get_text_embedding(self.tags_candidates)
+            
+            # Kosinus-Ähnlichkeit berechnen
+            if len(audio_embed.shape) > 1:
+                audio_embed = audio_embed.flatten()
+            if len(text_embeds.shape) > 2:
+                text_embeds = text_embeds.reshape(text_embeds.shape[0], -1)
+            
+            similarities = np.dot(audio_embed, text_embeds.T).flatten()
+            
+            # Top 3 Tags auswählen
+            top_indices = np.argsort(similarities)[-3:][::-1]
+            top_tags = [self.tags_candidates[i] for i in top_indices]
+            
+            logging.debug(f"CLAP-Tags generiert: {top_tags}")
+            return top_tags
+            
+        except Exception as e:
+            logging.error(f"Fehler bei CLAP-Tag-Generierung: {e}")
+            # Fallback: Erste drei Tags aus der Liste
+            return self.tags_candidates[:3]
+    
+    def _get_category(self, file_path: str) -> str:
+        """
+        Bestimmt die Kategorie eines Stems basierend auf Dateinamen-Heuristik.
+        
+        Args:
+            file_path (str): Der Pfad zur Originaldatei
+            
+        Returns:
+            str: Die ermittelte Kategorie
+        """
+        filename_lower = os.path.basename(file_path).lower()
+        
+        # Durchsuche Dateinamen nach Kategorie-Schlüsselwörtern
+        for category in self.categories:
+            if category in filename_lower:
+                logging.debug(f"Kategorie '{category}' erkannt in: {filename_lower}")
+                return category
+        
+        # Fallback: unknown
+        logging.debug(f"Keine Kategorie erkannt in: {filename_lower}, verwende 'unknown'")
+        return "unknown"
 
     def _insert_meta(self, metadata: Dict):
         """

@@ -1,16 +1,19 @@
-# Neuromorphic Dream-Engine v2.0 Dependencies
-# Audio processing and analysis
-librosa>=0.10.0
-numpy>=1.21.0
-soundfile>=0.12.0
+# Neuromorphic Dream-Engine v2.0 - Python Dependencies
+# Core audio processing and analysis libraries
 
-# Core Python libraries (usually included)
-# concurrent.futures - built-in
-# sqlite3 - built-in
-# hashlib - built-in
-# pathlib - built-in
-# shutil - built-in
-# os - built-in
-# logging - built-in
-# datetime - built-in
-# typing - built-in
+librosa>=0.10.0
+numpy>=1.24.0
+soundfile>=0.12.0
+laion-clap
+
+# Note: The following are built-in Python libraries and don't need installation:
+# - sqlite3 (built-in)
+# - os (built-in)
+# - logging (built-in)
+# - datetime (built-in)
+# - shutil (built-in)
+# - concurrent.futures (built-in)
+# - typing (built-in)
+# - hashlib (built-in)
+# - pathlib (built-in)
+# - json (built-in)
