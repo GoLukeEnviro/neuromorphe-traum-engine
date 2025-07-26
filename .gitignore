@@ -148,3 +148,6 @@ yarn-error.log*
 
 # Requirements backup
 requirements.txt.bak
+
+# Artifacts and temporary files
+=1.0.0
