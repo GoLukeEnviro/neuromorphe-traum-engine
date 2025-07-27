@@ -1,8 +1,211 @@
-# Neuromorphe Traum-Engine v2.0
+# 🧠 Neuromorphe Traum-Engine v2.0
 
-## Überblick
+*Semantic Audio Search with CLAP Embeddings*
 
-Die Neuromorphe Traum-Engine v2.0 ist ein fortschrittliches System für semantische Audio-Suche, das auf CLAP (Contrastive Language-Audio Pre-training) Embeddings basiert. Das System ermöglicht es Benutzern, Audio-Dateien durch natürlichsprachliche Beschreibungen zu finden und zu kategorisieren.
+## 📋 Übersicht
+
+Die Neuromorphe Traum-Engine v2.0 ist eine moderne, semantische Audio-Suchmaschine, die CLAP (Contrastive Language-Audio Pre-training) Embeddings verwendet, um natürlichsprachliche Suchanfragen in Audio-Inhalten zu ermöglichen. Das System kombiniert eine FastAPI-Backend-Architektur mit einem benutzerfreundlichen Streamlit-Frontend.
+
+## ✨ Features
+
+### 🎵 Audio-Verarbeitung
+- **Multi-Format-Support**: WAV, MP3, FLAC, OGG, M4A
+- **Automatische Metadaten-Extraktion**: BPM, Dauer, Sampling-Rate
+- **CLAP-Embedding-Generierung**: Semantische Audio-Repräsentationen
+- **Batch-Verarbeitung**: Effiziente Verarbeitung mehrerer Dateien
+
+### 🔍 Semantische Suche
+- **Text-zu-Audio-Suche**: Natürlichsprachliche Suchanfragen
+- **Ähnlichkeitssuche**: Finde ähnliche Audio-Dateien
+- **Erweiterte Filter**: Kategorie, BPM-Bereich, Ähnlichkeitsschwelle
+- **Fuzzy-Suche**: Tolerante Textsuche
+
+### 📊 Analytics & Statistiken
+- **Suchstatistiken**: Anzahl Dateien, Kategorien, Embeddings
+- **Performance-Metriken**: Suchzeiten, Cache-Effizienz
+- **Kategorie-Analyse**: Verteilung und Trends
+
+### 🎨 Benutzeroberfläche
+- **Moderne Streamlit-UI**: Responsive und intuitiv
+- **Real-time Updates**: Live-Status und Fortschrittsanzeigen
+- **Export-Funktionen**: CSV, JSON, Dateilisten
+- **Konfigurierbare Einstellungen**: Backend-Verbindung, Suchparameter
+
+## 🏗️ Architektur
+
+### Backend (FastAPI)
+```
+src/
+├── api/                 # API Router und Endpunkte
+├── audio/              # Audio-Verarbeitung und -Management
+├── search/             # Semantische Suchlogik
+├── database/           # SQLite-Datenbankoperationen
+└── main.py            # FastAPI-Anwendung
+```
+
+### Frontend (Streamlit)
+```
+pages/
+├── audio_upload.py     # Audio-Upload und -Verarbeitung
+├── search.py          # Suchinterface
+├── results.py         # Ergebnisanzeige
+└── settings.py        # Anwendungseinstellungen
+```
+
+## 🚀 Installation
+
+### Voraussetzungen
+- Python 3.8+
+- Git
+- Mindestens 4GB RAM (für CLAP-Modell)
+
+### Setup
+
+1. **Repository klonen**
+```bash
+git clone <repository-url>
+cd neuromorphe-traum-engine
+```
+
+2. **Virtual Environment erstellen**
+```bash
+python -m venv venv
+
+# Windows
+venv\Scripts\activate
+
+# Linux/Mac
+source venv/bin/activate
+```
+
+3. **Dependencies installieren**
+```bash
+pip install -r requirements.txt
+```
+
+4. **Verzeichnisstruktur erstellen**
+```bash
+mkdir -p data/audio data/embeddings data/database
+```
+
+## 🎯 Verwendung
+
+### Backend starten
+```bash
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+
+### Frontend starten
+```bash
+streamlit run streamlit_app.py
+```
+
+### API-Dokumentation
+Nach dem Start des Backends ist die interaktive API-Dokumentation verfügbar unter:
+- Swagger UI: `http://localhost:8000/docs`
+- ReDoc: `http://localhost:8000/redoc`
+
+## 📡 API-Endpunkte
+
+### Audio-Management
+- `POST /api/audio/upload` - Audio-Datei hochladen
+- `GET /api/audio/files` - Alle Audio-Dateien auflisten
+- `GET /api/audio/files/{file_id}` - Datei-Details abrufen
+- `POST /api/audio/files/{file_id}/process` - Embedding generieren
+- `GET /api/audio/files/{file_id}/embedding` - Embedding abrufen
+
+### Semantische Suche
+- `POST /api/search/text` - Text-zu-Audio-Suche
+- `POST /api/search/similar` - Ähnlichkeitssuche
+- `GET /api/search/stats` - Suchstatistiken
+- `GET /api/search/categories` - Verfügbare Kategorien
+
+### System
+- `GET /api/health` - System-Gesundheitsprüfung
+- `GET /api/audio/health` - Audio-Service-Status
+- `GET /api/search/health` - Search-Service-Status
+
+## 🔧 Konfiguration
+
+### Umgebungsvariablen
+```bash
+# Backend-Konfiguration
+BACKEND_HOST=localhost
+BACKEND_PORT=8000
+
+# Verzeichnisse
+AUDIO_DIR=./data/audio
+EMBEDDINGS_DIR=./data/embeddings
+DATABASE_PATH=./data/database/audio_files.db
+
+# CLAP-Modell
+CLAP_MODEL_VERSION=630k-audioset-best
+
+# Upload-Limits
+MAX_FILE_SIZE=100MB
+ALLOWED_EXTENSIONS=wav,mp3,flac,ogg,m4a
+```
+
+### Streamlit-Konfiguration
+```toml
+# .streamlit/config.toml
+[server]
+port = 8501
+maxUploadSize = 100
+
+[theme]
+primaryColor = "#FF6B6B"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F0F2F6"
+textColor = "#262730"
+```
+
+## 🧪 Testing
+
+### Unit Tests ausführen
+```bash
+pytest tests/ -v
+```
+
+### API Tests
+```bash
+pytest tests/test_api.py -v
+```
+
+### Integration Tests
+```bash
+pytest tests/test_integration.py -v
+```
+
+## 📊 Performance
+
+### Benchmarks
+- **Audio-Upload**: ~2-5s pro Datei (abhängig von Größe)
+- **Embedding-Generierung**: ~10-30s pro Datei (GPU empfohlen)
+- **Suchzeit**: <1s für 1000+ Dateien
+- **Speicherverbrauch**: ~2-4GB (CLAP-Modell geladen)
+
+### Optimierungen
+- **GPU-Beschleunigung**: CUDA-Support für CLAP-Modell
+- **Caching**: LRU-Cache für häufige Suchanfragen
+- **Batch-Processing**: Parallele Embedding-Generierung
+- **Database-Indizierung**: Optimierte SQLite-Abfragen
+
+## 🛠️ Entwicklung
+
+### Code-Struktur
+- **Domain-Driven Design**: Modulare Architektur
+- **Dependency Injection**: Lose gekoppelte Services
+- **Async/Await**: Asynchrone Verarbeitung
+- **Type Hints**: Vollständige Typisierung
+- **Pydantic**: Datenvalidierung und -serialisierung
+
+### Beitragen
+1. Fork des Repositories
+2. Feature-Branch erstellen (`git checkout -b feature/amazing-feature`)
+3. Änderungen committen (`git commit -m 'Add amazing feature'`)
+4. Branch pushen (`git push origin feature/amazing-feature`)
+5. Pull Request erstellen
 
 ## Projektstruktur
 
