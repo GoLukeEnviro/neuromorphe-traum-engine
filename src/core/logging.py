@@ -12,7 +12,7 @@ from typing import Optional, Dict, Any
 from datetime import datetime
 from functools import lru_cache
 
-from .config import get_settings
+from .config import settings
 
 
 class ColoredFormatter(logging.Formatter):
@@ -115,7 +115,7 @@ class LoggerManager:
     """Manager für Logger-Konfiguration"""
     
     def __init__(self, settings=None):
-        self.settings = settings or get_settings()
+        self.settings = settings
         self._loggers: Dict[str, logging.Logger] = {}
         self._handlers_configured = False
         
@@ -127,6 +127,10 @@ class LoggerManager:
         # Root-Logger konfigurieren
         root_logger = logging.getLogger()
         root_logger.setLevel(getattr(logging, self.settings.LOG_LEVEL))
+
+        # Sicherstellen, dass das Log-Verzeichnis existiert
+        log_dir = self.settings.get_logs_path()
+        log_dir.mkdir(parents=True, exist_ok=True)
         
         # Bestehende Handler entfernen
         for handler in root_logger.handlers[:]:
@@ -359,7 +363,7 @@ def get_logger_manager() -> LoggerManager:
     """Logger-Manager-Instanz abrufen"""
     global _logger_manager
     if _logger_manager is None:
-        _logger_manager = LoggerManager()
+        _logger_manager = LoggerManager(settings)
         _logger_manager.setup_logging()
     return _logger_manager
 
@@ -371,10 +375,12 @@ def get_logger(name: str) -> logging.Logger:
     return manager.get_logger(name)
 
 
-def setup_logging(settings=None):
+def setup_logging(settings_obj=None):
     """Logging-System initialisieren"""
     global _logger_manager
-    _logger_manager = LoggerManager(settings)
+    if settings_obj is None:
+        settings_obj = settings
+    _logger_manager = LoggerManager(settings_obj)
     _logger_manager.setup_logging()
 
 

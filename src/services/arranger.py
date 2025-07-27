@@ -10,7 +10,7 @@ from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 from enum import Enum
 
-from ..db.crud import get_stems_by_category, search_stems_by_tags_and_category
+from ..db.crud import get_stems_by_category, search_stems_by_text
 from ..db.database import get_db
 
 logger = logging.getLogger(__name__)
@@ -360,10 +360,9 @@ class ArrangerService:
             for query in section.stem_queries:
                 # Prüfe ob passende Stems verfügbar sind
                 try:
-                    stems = await search_stems_by_tags_and_category(
+                    stems = await search_stems_by_text(
                         db=db,
-                        category=query.category,
-                        tags=query.tags,
+                        search_text=f"{query.category} {' '.join(query.tags)}",
                         limit=query.count
                     )
                     

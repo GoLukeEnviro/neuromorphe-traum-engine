@@ -20,12 +20,12 @@ from sqlalchemy.pool import StaticPool
 from sqlalchemy.exc import SQLAlchemyError
 import aiosqlite
 
-from core.config import get_settings
+from core.config import settings
 from core.logging import get_logger, log_database_operation, PerformanceLogger
 from .models import Base
 
 # Settings und Logger
-settings = get_settings()
+settings = settings
 logger = get_logger(__name__)
 
 
@@ -33,7 +33,7 @@ class DatabaseManager:
     """Manager für Datenbankverbindungen und -operationen"""
     
     def __init__(self):
-        self.settings = get_settings()
+        self.settings = settings
         self.logger = get_logger(self.__class__.__name__)
         
         # Engines

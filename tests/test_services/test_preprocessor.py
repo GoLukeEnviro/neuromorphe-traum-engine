@@ -17,7 +17,9 @@ class TestPreprocessorService:
     @pytest.fixture
     def preprocessor(self, test_settings: Settings, mock_neuro_analyzer) -> PreprocessorService:
         """PreprocessorService-Instanz für Tests"""
-        return PreprocessorService(test_settings, mock_neuro_analyzer)
+        with patch('src.services.preprocessor.essentia'), \
+             patch('src.services.preprocessor.es'):
+            return PreprocessorService(test_settings, mock_neuro_analyzer)
     
     @pytest.mark.unit
     def test_initialization(self, test_settings: Settings, mock_neuro_analyzer):

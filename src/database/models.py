@@ -128,7 +128,7 @@ class GeneratedTrack(Base):
     quality_rating = Column(String(20), nullable=True)  # excellent, good, fair, poor
     
     # Metadaten
-    metadata = Column(SQLiteJSON, nullable=True)  # Zusätzliche Metadaten
+    track_metadata = Column(SQLiteJSON, nullable=True)  # Zusätzliche Metadaten
     tags = Column(SQLiteJSON, nullable=True)  # Track-Tags
     
     # Zeitstempel

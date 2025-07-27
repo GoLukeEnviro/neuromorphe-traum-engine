@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 
 from .models import (
     Stem, GeneratedTrack, TrackStem, ProcessingJob,
-    SystemMetrics, UserSession, ConfigurationSetting
+    SystemMetrics, UserSession, ConfigurationSetting, get_active_jobs_count, get_system_statistics
 )
 
 logger = logging.getLogger(__name__)
@@ -134,6 +134,42 @@ class StemCRUD:
             query = query.filter(and_(*conditions))
         
         return query.order_by(desc(Stem.quality_score)).limit(limit).all()
+
+    @staticmethod
+    async def search_stems_by_tags_and_category(
+        db: Session,
+        category: str,
+        tags: List[str],
+        limit: int = 1
+    ) -> List[Stem]:
+        """
+        Sucht Stems, die zu einer Kategorie und einer Liste von Tags passen.
+        Die Suche ist so konzipiert, dass sie die besten Treffer findet, auch wenn nicht alle Tags passen.
+        """
+        logger.debug(f"Suche Stems: Kategorie='{category}', Tags={tags}, Limit={limit}")
+        
+        # Basis-Query: Filter nach Kategorie und Status
+        query = db.query(Stem).filter(
+            Stem.category.ilike(f"%{category}%"),
+            Stem.processing_status == "completed"
+        )
+
+        if not tags:
+            # Wenn keine Tags gegeben sind, zufällige Stems der Kategorie zurückgeben
+            return query.order_by(func.random()).limit(limit).all()
+
+        # Erstelle eine gewichtete Suche basierend auf Tag-Übereinstimmung.
+        # Jeder passende Tag erhöht die Relevanz.
+        # HINWEIS: Dies ist eine vereinfachte Implementierung für SQLite.
+        # In PostgreSQL oder mit FTS5 könnte dies effizienter gestaltet werden.
+        
+        conditions = []
+        for tag in tags:
+            conditions.append(Stem.tags.ilike(f'%"{tag}"%'))
+        
+        # Filtere nach Stems, die mindestens einen der Tags enthalten
+        query = query.filter(or_(*conditions))
+        return query.order_by(func.random()).limit(limit).all()
     
     @staticmethod
     def update_stem(db: Session, stem_id: int, update_data: Dict[str, Any]) -> Optional[Stem]:

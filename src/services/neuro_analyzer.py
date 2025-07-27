@@ -21,7 +21,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
 
-from ..config import settings
+from src.core.config import settings
 
 logger = logging.getLogger(__name__)
 

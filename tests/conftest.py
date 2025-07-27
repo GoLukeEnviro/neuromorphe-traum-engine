@@ -15,18 +15,15 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 # Test-spezifische Imports
-try:
-    from src.core.config import Settings
-    from src.database.database import DatabaseManager, get_database_session
-    from src.database.models import Base
-    from src.main import create_app
-    from src.services.arranger import ArrangerService
-    from src.services.neuro_analyzer import NeuroAnalyzer
-    from src.services.preprocessor import PreprocessorService
-    from src.services.renderer import RendererService
-except ImportError:
-    # Fallback für isolierte Tests
-    pass
+from src.core.config import Settings
+from src.database.database import DatabaseManager
+from src.database.database import get_async_db_session
+from src.database.models import Base
+from src.main import app
+from src.services.arranger import ArrangerService
+from src.services.neuro_analyzer import NeuroAnalyzer
+from src.services.preprocessor import PreprocessorService
+from src.services.renderer import RendererService
 
 
 @pytest.fixture(scope="session")
