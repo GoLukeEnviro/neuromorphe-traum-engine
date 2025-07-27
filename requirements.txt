@@ -27,6 +27,7 @@ laion-clap==1.1.4
 python-dotenv==1.0.0
 typing-extensions==4.8.0
 click==8.1.7
+pydantic-settings==2.1.0
 
 # Development Dependencies (optional)
 pytest==7.4.3

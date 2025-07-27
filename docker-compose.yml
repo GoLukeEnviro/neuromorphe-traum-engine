@@ -1,0 +1,61 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: neuromorphe-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=sqlite:///processed_database/stems.db
+      - UPLOAD_DIR=./raw_construction_kits
+      - PROCESSED_DIR=./processed_database/stems
+      - EMBEDDINGS_DIR=./dataembeddings
+      - MODEL_CACHE_DIR=./models
+      - DEBUG=false
+    volumes:
+      - ./processed_database:/app/processed_database
+      - ./raw_construction_kits:/app/raw_construction_kits
+      - ./dataembeddings:/app/dataembeddings
+      - ./models:/app/models
+    networks:
+      - neuromorphe-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/system/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: neuromorphe-frontend
+    ports:
+      - "8501:8501"
+    environment:
+      - API_BASE_URL=http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - neuromorphe-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  neuromorphe-network:
+    driver: bridge
+
+volumes:
+  neuromorphe-data:
+    driver: local

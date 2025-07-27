@@ -170,7 +170,14 @@ logs/
 temp/
 tmp/
 
-# Audio files
+# Neuromorphe Traum-Engine v2.0 - DIRECTIVE 014 specific
+# Audio input/output directories
+raw_construction_kits/
+generated_tracks/
+processed_database/stems/
+processed_database/quarantine/
+
+# Audio files (keep some for testing)
 *.wav
 *.mp3
 *.flac
@@ -178,6 +185,9 @@ tmp/
 *.m4a
 *.aac
 *.wma
+# Exception: Allow test audio files
+!test_audio/
+!samples/
 
 # Database files
 *.db
@@ -186,6 +196,9 @@ tmp/
 *.db-journal
 *.db-wal
 *.db-shm
+# Exception: Keep schema/migration files
+!**/schema.sql
+!**/migrations/
 
 # Model files and embeddings
 *.pt
@@ -196,6 +209,27 @@ tmp/
 embeddings/
 models/
 checkpoints/
+# CLAP model cache
+.cache/
+huggingface_cache/
+torch_cache/
+
+# Processing artifacts
+processing_logs/
+failed_files.json
+progress.json
+*.pkl
+*.pickle
+
+# Generated content
+generated_*/
+output_*/
+render_*/
+
+# Audio processing temporary files
+*.tmp.wav
+*.processing
+*.lock
 
 # Streamlit
 .streamlit/secrets.toml
