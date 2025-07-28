@@ -11,6 +11,8 @@ import subprocess
 from pathlib import Path
 import importlib.util
 
+from ..core.config import settings
+
 
 def check_dependencies():
     """
@@ -57,13 +59,11 @@ def create_directories():
     print("\n📁 Creating directories...")
     
     directories = [
-        "stereo_tracks_for_analysis",
-        "models", 
-        "generated_stems",
-        "generated_tracks",
-        "processed_database",
-        "processed_database/stems",
-        "processed_database/quarantine"
+        settings.UPLOAD_DIR,
+        settings.PROCESSED_DIR,
+        settings.EMBEDDINGS_DIR,
+        settings.GENERATED_TRACKS_DIR,
+        settings.get_logs_path()
     ]
     
     for directory in directories:
@@ -82,9 +82,6 @@ async def initialize_database():
     print("\n🗄️  Initializing database...")
     
     try:
-        # Add src to path
-        sys.path.append(str(Path(__file__).parent / "src"))
-        
         from database.service import DatabaseService
         
         db_service = DatabaseService()
@@ -135,7 +132,7 @@ def check_audio_files():
     """
     print("\n🎵 Checking for audio files...")
     
-    stereo_dir = Path("stereo_tracks_for_analysis")
+    stereo_dir = Path(settings.STEREO_TRACKS_DIR)
     audio_extensions = ["*.wav", "*.mp3", "*.flac", "*.aiff"]
     
     audio_files = []
@@ -175,11 +172,6 @@ def start_server():
     print("="*60)
     
     try:
-        # Add project root to Python path so 'src' module can be found
-        project_root = str(Path(__file__).parent)
-        if project_root not in sys.path:
-            sys.path.insert(0, project_root)
-        
         # Start uvicorn server from the main directory
         subprocess.run([
             sys.executable, "-m", "uvicorn", 

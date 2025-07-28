@@ -1,16 +1,16 @@
 """Tests für Stem-Schemas"""
 
+import os
 import pytest
 from datetime import datetime
 from typing import List, Dict, Any
 from unittest.mock import MagicMock
 
-from src.schemas.stem import (
+from src.schemas.schemas import (
     StemBase, StemCreate, StemUpdate, StemResponse,
     StemSearch, StemMetadata, StemFeatures,
     StemAnalysis, StemSimilarity, StemBatch
 )
-from src.core.exceptions import ValidationError
 
 
 class TestStemBase:

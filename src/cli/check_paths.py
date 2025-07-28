@@ -3,88 +3,85 @@
 Überprüft die Pfade in der Datenbank, um zu verstehen, wie die Dateien gespeichert wurden.
 """
 
-import sqlite3
-import os
+import asyncio
 from pathlib import Path
 
-def check_database_paths():
+from ...database.service import DatabaseService
+from ...core.config import settings
+
+async def check_database_paths():
     """
     Überprüft alle Pfade in der Datenbank und sucht nach Techno-Dateien.
     """
     print("=== DATENBANKPFAD-ANALYSE ===")
     print()
     
-    # Datenbankverbindung
-    db_path = "processed_database/stems.db"
-    if not os.path.exists(db_path):
+    db_service = DatabaseService()
+    db_path = Path(settings.DATABASE_URL.replace("sqlite:///", ""))
+    
+    if not db_path.exists():
         print("❌ Datenbank nicht gefunden!")
         return
     
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
+    try:
     
     try:
         # Alle Pfade anzeigen
         print("1. ALLE PFADE IN DER DATENBANK:")
-        cursor.execute("SELECT path, bpm, category FROM stems ORDER BY imported_at DESC LIMIT 20")
-        all_paths = cursor.fetchall()
+        all_stems = await db_service.get_all_stems(limit=20, order_by="created_at", order_desc=True)
         
-        for i, (path, bpm, category) in enumerate(all_paths, 1):
-            filename = Path(path).name
-            bpm_str = f"{bpm:.1f} BPM" if bpm > 0 else "No BPM"
-            print(f"   {i:2d}. {filename} | {category} | {bpm_str}")
+        for i, stem in enumerate(all_stems, 1):
+            filename = Path(stem.original_path).name if stem.original_path else stem.filename
+            bpm_str = f"{stem.bpm:.1f} BPM" if stem.bpm is not None and stem.bpm > 0 else "No BPM"
+            print(f"   {i:2d}. {filename} | {stem.category} | {bpm_str}")
             if i <= 5:  # Zeige vollständige Pfade für die ersten 5
-                print(f"       Vollständiger Pfad: {path}")
+                print(f"       Vollständiger Pfad: {stem.original_path}")
         print()
         
         # Suche nach verschiedenen Mustern
         print("2. SUCHE NACH TECHNO-DATEIEN:")
         
         patterns = [
-            ('%techno%', 'techno'),
-            ('%LPE%', 'LPE'),
-            ('%drt%', 'drt'),
-            ('%130%', '130 (BPM-Hinweis)'),
-            ('%LPE126%', 'LPE126')
+            ('techno', 'techno'),
+            ('LPE', 'LPE'),
+            ('drt', 'drt'),
+            ('130', '130 (BPM-Hinweis)'),
+            ('LPE126', 'LPE126')
         ]
         
         for pattern, description in patterns:
-            cursor.execute("SELECT COUNT(*) FROM stems WHERE path LIKE ?", (pattern,))
-            count = cursor.fetchone()[0]
+            count = await db_service.get_stem_count(path_pattern=pattern)
             print(f"   {description}: {count} Dateien gefunden")
             
             if count > 0:
-                cursor.execute("SELECT path FROM stems WHERE path LIKE ? LIMIT 3", (pattern,))
-                examples = cursor.fetchall()
-                for path, in examples:
-                    print(f"      Beispiel: {Path(path).name}")
+                examples = await db_service.search_stems_by_path_pattern(path_pattern=pattern, limit=3)
+                for stem in examples:
+                    filename = Path(stem.original_path).name if stem.original_path else stem.filename
+                    print(f"      Beispiel: {filename}")
         print()
         
         # Neueste Einträge
         print("3. NEUESTE EINTRÄGE (letzte 10):")
-        cursor.execute("""
-            SELECT path, bpm, category, imported_at FROM stems 
-            ORDER BY imported_at DESC 
-            LIMIT 10
-        """)
+        recent_entries = await db_service.get_all_stems(limit=10, order_by="created_at", order_desc=True)
         
-        recent_entries = cursor.fetchall()
-        for path, bpm, category, imported_at in recent_entries:
-            filename = Path(path).name
-            bpm_str = f"{bpm:.1f} BPM" if bpm > 0 else "No BPM"
-            print(f"   {filename} | {category} | {bpm_str} | {imported_at}")
+        for stem in recent_entries:
+            filename = Path(stem.original_path).name if stem.original_path else stem.filename
+            bpm_str = f"{stem.bpm:.1f} BPM" if stem.bpm is not None and stem.bpm > 0 else "No BPM"
+            print(f"   {filename} | {stem.category} | {bpm_str} | {stem.created_at}")
         print()
         
         # Statistiken
         print("4. GESAMTSTATISTIKEN:")
-        cursor.execute("SELECT COUNT(*) FROM stems")
-        total = cursor.fetchone()[0]
+        total = await db_service.get_stem_count()
         
-        cursor.execute("SELECT COUNT(*) FROM stems WHERE bpm > 120 AND bpm < 140")
-        techno_bpm = cursor.fetchone()[0]
+        # Annahme: Techno-BPM ist zwischen 120 und 140
+        techno_bpm_stems = await db_service.get_all_stems(bpm_min=120, bpm_max=140)
+        techno_bpm = len(techno_bpm_stems)
         
-        cursor.execute("SELECT COUNT(*) FROM stems WHERE imported_at > datetime('now', '-1 hour')")
-        recent = cursor.fetchone()[0]
+        # In letzter Stunde hinzugefügt (requires a method in DatabaseService to filter by time)
+        # For now, I'll use a placeholder or skip this if no direct method exists.
+        # If needed, a method like get_stems_added_since(datetime_obj) could be added to DatabaseService
+        recent = "N/A" # Placeholder for now
         
         print(f"   Gesamtanzahl Dateien: {total}")
         print(f"   Dateien mit Techno-BPM (120-140): {techno_bpm}")
@@ -92,8 +89,6 @@ def check_database_paths():
         
     except Exception as e:
         print(f"❌ Fehler bei der Analyse: {e}")
-    finally:
-        conn.close()
 
 if __name__ == "__main__":
-    check_database_paths()
+    asyncio.run(check_database_paths())

@@ -1,6 +1,26 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "neuromorphe_traum_engine"
 version = "0.1.0"
+description = "Neuromorphe Traum-Engine - KI-gestützter kreativer Partner für Raw-Techno"
+dependencies = [
+    "fastapi",
+    "pydantic",
+    "sqlalchemy",
+    "uvicorn",
+    "librosa",
+    "numpy",
+    "pytest",
+    "pytest-mock"
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "--import-mode=importlib -ra"

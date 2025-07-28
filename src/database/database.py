@@ -46,10 +46,10 @@ class DatabaseManager:
         
         # Connection Pool Settings
         self._pool_settings = {
-            'pool_size': self.settings.DATABASE_POOL_SIZE,
-            'max_overflow': self.settings.DATABASE_MAX_OVERFLOW,
-            'pool_timeout': self.settings.DATABASE_POOL_TIMEOUT,
-            'pool_recycle': self.settings.DATABASE_POOL_RECYCLE,
+            'pool_size': getattr(self.settings, 'DATABASE_POOL_SIZE', 5),
+            'max_overflow': getattr(self.settings, 'DATABASE_MAX_OVERFLOW', 10),
+            'pool_timeout': getattr(self.settings, 'DATABASE_POOL_TIMEOUT', 30),
+            'pool_recycle': getattr(self.settings, 'DATABASE_POOL_RECYCLE', 3600),
             'pool_pre_ping': True
         }
         
@@ -454,11 +454,26 @@ def get_sync_db_session() -> Session:
     return db_manager.get_sync_session()
 
 
+def get_db():
+    """FastAPI Dependency für Sync Database Session (Legacy-Kompatibilität)"""
+    db = get_sync_db_session()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
 # Hilfsfunktionen
-async def init_database():
-    """Datenbank initialisieren"""
+async def create_tables():
+    """Tabellen erstellen (Legacy-Kompatibilität)"""
     db_manager = get_database_manager()
     await db_manager.create_tables()
+    logger.info("Database tables created")
+
+
+async def init_database():
+    """Datenbank initialisieren"""
+    await create_tables()
     logger.info("Database initialization completed")
 
 

@@ -46,7 +46,7 @@ with st.sidebar:
     if st.button("🔄 Check Backend Status"):
         try:
             import requests
-            response = requests.get(f"{st.session_state.backend_url}/api/v1/health", timeout=5)
+            response = requests.get(f"{st.session_state.backend_url}/system/health", timeout=5)
             if response.status_code == 200:
                 st.success("✅ Backend is running")
             else:

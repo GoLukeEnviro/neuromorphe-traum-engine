@@ -10,8 +10,8 @@ from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 from enum import Enum
 
-from ..db.crud import get_stems_by_category, search_stems_by_text
-from ..db.database import get_db
+from ..database.service import DatabaseService
+from ..database.models import Stem
 
 logger = logging.getLogger(__name__)
 
@@ -146,6 +146,7 @@ class ArrangerService:
     
     def __init__(self):
         self.parser = PromptParser()
+        self.db_service = DatabaseService()
         logger.info("ArrangerService initialisiert")
     
     def generate_arrangement_plan(self, prompt: str) -> ArrangementPlan:
@@ -178,6 +179,114 @@ class ArrangerService:
         
         logger.info(f"Arrangement-Plan erstellt: {total_bars} Takte, {estimated_duration:.1f}s")
         return plan
+    
+    async def create_arrangement(
+        self,
+        prompt: str,
+        duration: Optional[float] = None
+    ) -> Dict[str, Any]:
+        """Erstellt ein vollständiges Arrangement basierend auf einem Text-Prompt"""
+        logger.info(f"Erstelle Arrangement für Prompt: '{prompt}'")
+        
+        # Arrangement-Plan generieren
+        plan = self.generate_arrangement_plan(prompt)
+        
+        # Stems für jede Sektion auswählen
+        selected_stems = []
+        global_key = None
+        
+        for section in plan.structure:
+            section_stems = []
+            
+            for query in section.stem_queries:
+                # Erste Stem-Auswahl bestimmt die globale Tonart
+                if global_key is None:
+                    # Suche nach Stems ohne Tonart-Filter
+                    stems = await self._search_stems_for_query(
+                        query, None, plan.bpm
+                    )
+                    if stems:
+                        global_key = stems[0].key
+                        logger.info(f"Globale Tonart festgelegt: {global_key}")
+                        section_stems.extend(stems)
+                else:
+                    # Suche nach harmonisch kompatiblen Stems
+                    stems = await self._search_stems_for_query(
+                        query, global_key, plan.bpm
+                    )
+                    section_stems.extend(stems)
+            
+            selected_stems.append({
+                'section': section.section,
+                'bars': section.bars,
+                'stems': [{
+                    'id': stem.id,
+                    'filename': stem.filename,
+                    'category': stem.category,
+                    'key': stem.key,
+                    'bpm': stem.bpm,
+                    'harmonic_complexity': stem.harmonic_complexity,
+                    'rhythmic_complexity': stem.rhythmic_complexity
+                } for stem in section_stems]
+            })
+        
+        # Arrangement-Metadaten zusammenstellen
+        arrangement_data = {
+            'arrangement_id': f"arr_{hash(prompt)}",
+            'prompt': prompt,
+            'global_key': global_key or plan.key,
+            'bpm': plan.bpm,
+            'genre': plan.genre,
+            'mood': plan.mood,
+            'total_bars': plan.total_bars,
+            'estimated_duration': plan.estimated_duration,
+            'structure': selected_stems,
+            'metadata': {
+                'created_with_musical_intelligence': True,
+                'harmonic_coherence': True,
+                'key_compatibility_used': global_key is not None
+            }
+        }
+        
+        logger.info(f"Arrangement erstellt: {len(selected_stems)} Sektionen, Tonart: {global_key}")
+        return arrangement_data
+    
+    async def _search_stems_for_query(
+        self,
+        query: StemQuery,
+        global_key: Optional[str],
+        target_bpm: int
+    ) -> List[Stem]:
+        """Sucht Stems für eine spezifische Query mit musikalischer Intelligenz"""
+        try:
+            if global_key:
+                # Suche nach harmonisch kompatiblen Stems
+                stems = await self.db_service.search_harmonically_compatible_stems(
+                    base_key=global_key,
+                    category=query.category,
+                    tags=query.tags,
+                    limit=query.count
+                )
+            else:
+                # Erste Suche ohne Tonart-Filter
+                stems = await self.db_service.get_stems(
+                    category=query.category,
+                    bpm_min=target_bpm - 10,
+                    bpm_max=target_bpm + 10,
+                    processing_status="completed",
+                    limit=query.count
+                )
+            
+            if len(stems) < query.count and query.required:
+                logger.warning(
+                    f"Nur {len(stems)}/{query.count} Stems für {query.category} gefunden"
+                )
+            
+            return stems[:query.count]
+            
+        except Exception as e:
+            logger.error(f"Fehler bei Stem-Suche: {e}")
+            return []
     
     def _generate_track_structure(self, genre: MusicGenre, bpm: int, moods: List[str]) -> List[ArrangementSection]:
         """Generiert die Track-Struktur basierend auf Genre und Parametern"""
@@ -354,15 +463,12 @@ class ArrangerService:
             'available_alternatives': {}
         }
         
-        db = next(get_db())
-        
         for section in plan.structure:
             for query in section.stem_queries:
                 # Prüfe ob passende Stems verfügbar sind
                 try:
-                    stems = await search_stems_by_text(
-                        db=db,
-                        search_text=f"{query.category} {' '.join(query.tags)}",
+                    stems = await self.db_service.search_stems_by_text(
+                        query_text=f"{query.category} {' '.join(query.tags)}",
                         limit=query.count
                     )
                     

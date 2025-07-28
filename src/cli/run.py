@@ -18,7 +18,7 @@ from typing import Optional
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from core.config import get_settings
+from ..core.config import settings
 from core.logging import setup_logging, get_logger
 from database.database import get_database_manager, init_database
 from services.preprocessor import PreprocessorService
@@ -130,11 +130,10 @@ async def setup_database(force: bool = False):
         await db_manager.create_tables()
         
         # Basis-Konfiguration einfügen
-        from database.crud import ConfigurationSettingCRUD
-        from schemas.schemas import ConfigurationSettingCreate
+        from ..database.crud import ConfigurationCRUD
+from ..schemas.schemas import ConfigurationSettingCreate
         
         async with db_manager.get_async_session() as session:
-            config_crud = ConfigurationSettingCRUD(session)
             
             # Standard-Konfigurationen
             default_configs = [
@@ -147,10 +146,9 @@ async def setup_database(force: bool = False):
             
             for config_data in default_configs:
                 # Prüfen ob bereits vorhanden
-                existing = await config_crud.get_by_key(config_data["key"])
+                existing = await ConfigurationCRUD.get_setting(session, "system", config_data["key"])
                 if not existing:
-                    config_create = ConfigurationSettingCreate(**config_data)
-                    await config_crud.create(config_create)
+                    await ConfigurationCRUD.set_setting(session, category="system", key=config_data["key"], value=config_data["value"], data_type="string", description=config_data["description"])
                     logger.info(f"Created config: {config_data['key']}")
         
         logger.info("Database setup completed successfully")
@@ -177,13 +175,13 @@ async def run_system_tests():
         
         # 2. Verzeichnis-Test
         logger.info("Testing directory structure...")
-        settings = get_settings()
         
         required_dirs = [
-            settings.AUDIO_INPUT_DIR,
-            settings.AUDIO_OUTPUT_DIR,
-            settings.PROCESSED_DATABASE_DIR,
-            settings.GENERATED_TRACKS_DIR
+            settings.UPLOAD_DIR,
+            settings.PROCESSED_DIR,
+            settings.GENERATED_TRACKS_DIR,
+            settings.EMBEDDINGS_DIR,
+            settings.get_logs_path()
         ]
         
         for dir_path in required_dirs:
@@ -204,9 +202,8 @@ async def run_system_tests():
         
         # PreprocessorService Test
         try:
-            async with db_manager.get_async_session() as session:
-                preprocessor = PreprocessorService(session)
-                logger.info("PreprocessorService initialized successfully")
+            preprocessor = PreprocessorService()
+            logger.info("PreprocessorService initialized successfully")
         except Exception as e:
             logger.error(f"PreprocessorService test failed: {e}")
             return False
@@ -237,45 +234,45 @@ async def run_preprocessing(input_dir: Path, force: bool = False):
         logger.info(f"Starting preprocessing for: {input_dir}")
         
         db_manager = get_database_manager()
-        async with db_manager.get_async_session() as session:
-            preprocessor = PreprocessorService(session)
+        # PreprocessorService instanziiert seinen eigenen DatabaseService
+        preprocessor = PreprocessorService()
             
-            # Audio-Dateien finden
-            audio_extensions = {'.wav', '.mp3', '.flac', '.aiff', '.m4a'}
-            audio_files = []
-            
-            for ext in audio_extensions:
-                audio_files.extend(input_dir.glob(f"**/*{ext}"))
-                audio_files.extend(input_dir.glob(f"**/*{ext.upper()}"))
-            
-            if not audio_files:
-                logger.warning(f"No audio files found in: {input_dir}")
-                return True
-            
-            logger.info(f"Found {len(audio_files)} audio files")
-            
-            # Preprocessing durchführen
-            success_count = 0
-            error_count = 0
-            
-            for audio_file in audio_files:
-                try:
-                    logger.info(f"Processing: {audio_file.name}")
-                    result = await preprocessor.process_audio_file(audio_file)
-                    
-                    if result['success']:
-                        success_count += 1
-                        logger.info(f"Successfully processed: {audio_file.name}")
-                    else:
-                        error_count += 1
-                        logger.error(f"Failed to process: {audio_file.name} - {result.get('error')}")
-                        
-                except Exception as e:
+        # Audio-Dateien finden
+        audio_extensions = {'.wav', '.mp3', '.flac', '.aiff', '.m4a'}
+        audio_files = []
+        
+        for ext in audio_extensions:
+            audio_files.extend(input_dir.glob(f"**/*{ext}"))
+            audio_files.extend(input_dir.glob(f"**/*{ext.upper()}"))
+        
+        if not audio_files:
+            logger.warning(f"No audio files found in: {input_dir}")
+            return True
+        
+        logger.info(f"Found {len(audio_files)} audio files")
+        
+        # Preprocessing durchführen
+        success_count = 0
+        error_count = 0
+        
+        for audio_file in audio_files:
+            try:
+                logger.info(f"Processing: {audio_file.name}")
+                result = await preprocessor.process_audio_file(str(audio_file))
+                
+                if result['success']:
+                    success_count += 1
+                    logger.info(f"Successfully processed: {audio_file.name}")
+                else:
                     error_count += 1
-                    logger.error(f"Error processing {audio_file.name}: {e}", exc_info=True)
-            
-            logger.info(f"Preprocessing completed: {success_count} success, {error_count} errors")
-            return error_count == 0
+                    logger.error(f"Failed to process: {audio_file.name} - {result.get('error')}")
+                    
+            except Exception as e:
+                error_count += 1
+                logger.error(f"Error processing {audio_file.name}: {e}", exc_info=True)
+        
+        logger.info(f"Preprocessing completed: {success_count} success, {error_count} errors")
+        return error_count == 0
         
     except Exception as e:
         logger.error(f"Preprocessing failed: {e}", exc_info=True)
@@ -316,13 +313,13 @@ async def show_health_status():
                 print(f"  {table}: {size} rows")
         
         # Verzeichnis-Status
-        settings = get_settings()
         print("\nDirectory Status:")
         dirs_to_check = {
-            "Audio Input": settings.AUDIO_INPUT_DIR,
-            "Audio Output": settings.AUDIO_OUTPUT_DIR,
-            "Processed DB": settings.PROCESSED_DATABASE_DIR,
-            "Generated Tracks": settings.GENERATED_TRACKS_DIR
+            "Upload Dir": settings.UPLOAD_DIR,
+            "Processed Dir": settings.PROCESSED_DIR,
+            "Embeddings Dir": settings.EMBEDDINGS_DIR,
+            "Generated Tracks Dir": settings.GENERATED_TRACKS_DIR,
+            "Logs Dir": settings.get_logs_path()
         }
         
         for name, path in dirs_to_check.items():

@@ -36,11 +36,7 @@ class AudioProcessingResponse(BaseModel):
     message: str
     created_at: datetime
     
-    model_config = ConfigDict(
-        json_encoders={
-            datetime: lambda v: v.isoformat()
-        }
-    )
+    model_config = ConfigDict(from_attributes=True)
 
 
 class EmbeddingResponse(BaseModel):

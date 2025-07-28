@@ -6,14 +6,13 @@ from typing import List, Dict, Any, Optional
 from unittest.mock import MagicMock
 from enum import Enum
 
-from src.schemas.websocket import (
-    WebSocketMessage, WebSocketEvent, WebSocketResponse,
-    ConnectionMessage, DisconnectionMessage, ErrorMessage,
+from src.schemas.schemas import (
+    WebSocketMessage, WebSocketResponse, ClientInfo, MessageType,
+    NotificationMessage, SubscriptionRequest, ProgressUpdate,
+    WebSocketEvent, ConnectionMessage, DisconnectionMessage, ErrorMessage,
     RenderProgressMessage, AnalysisProgressMessage, SystemStatusMessage,
-    NotificationMessage, BroadcastMessage, PrivateMessage,
-    SubscriptionMessage, UnsubscriptionMessage, HeartbeatMessage,
-    ClientInfo, ConnectionStatus, MessageType, EventType,
-    ProgressUpdate, StatusUpdate, SystemMetrics
+    BroadcastMessage, PrivateMessage, UnsubscriptionMessage, HeartbeatMessage,
+    ConnectionStatus, EventType, StatusUpdate, SystemMetrics
 )
 from src.core.exceptions import ValidationError
 

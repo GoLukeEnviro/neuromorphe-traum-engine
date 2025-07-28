@@ -1,12 +1,13 @@
-import numpy as np
 import logging
+import numpy as np
 from typing import List, Dict, Optional, Tuple
 from sqlalchemy.orm import Session
 from laion_clap import CLAP_Module
 import json
 
-from ..db import crud
-from ..schemas.stem import SearchResult, Stem
+from ..database.service import DatabaseService
+from ..schemas.stem import SearchResult
+from ..database.models import Stem
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -18,6 +19,7 @@ class SearchService:
         """Initialize the search service with CLAP model"""
         logger.info("Initializing SearchService...")
         self.clap_model = None
+        self.db_service = DatabaseService()
         self._load_clap_model()
         logger.info("SearchService ready.")
     
@@ -32,9 +34,8 @@ class SearchService:
             logger.error(f"Failed to load CLAP model: {e}")
             raise
     
-    def search(
+    async def search(
         self, 
-        db: Session, 
         query: str, 
         top_k: int = 5,
         category_filter: Optional[str] = None,
@@ -50,8 +51,8 @@ class SearchService:
         query_embedding = self._get_text_embedding(query)
         
         # Load stems with embeddings from database
-        stems_data = self._load_stems_with_embeddings(
-            db, category_filter, bpm_range
+        stems_data = await self._load_stems_with_embeddings(
+            category_filter, bpm_range
         )
         
         if not stems_data:
@@ -62,7 +63,7 @@ class SearchService:
         similarities = []
         for stem_data in stems_data:
             similarity = self._calculate_cosine_similarity(
-                query_embedding, stem_data['embedding']
+                query_embedding, np.array(stem_data['embedding'])
             )
             similarities.append({
                 'stem': stem_data['stem'],
@@ -96,41 +97,30 @@ class SearchService:
             logger.error(f"Error calculating text embedding: {e}")
             raise
     
-    def _load_stems_with_embeddings(
+    async def _load_stems_with_embeddings(
         self, 
-        db: Session,
         category_filter: Optional[str] = None,
         bpm_range: Optional[Tuple[float, float]] = None
     ) -> List[Dict]:
         """Load all stems with their CLAP embeddings from database"""
         # Get stems from database
-        stems = crud.get_stems(db, skip=0, limit=10000)  # Large limit to get all
+        stems = await self.db_service.get_all_stems(category=category_filter)  # Use db_service
         
         stems_data = []
         for stem in stems:
             # Skip stems without embeddings
-            if not stem.clap_embedding:
+            if not stem.audio_embedding:
                 continue
             
-            # Apply filters
-            if category_filter and stem.category != category_filter:
-                continue
-            
+            # Apply BPM filter
             if bpm_range and stem.bpm:
                 if not (bpm_range[0] <= stem.bpm <= bpm_range[1]):
                     continue
             
-            # Reconstruct embedding from binary data
-            try:
-                embedding = np.frombuffer(stem.clap_embedding, dtype=np.float32)
-                
-                stems_data.append({
-                    'stem': stem,
-                    'embedding': embedding
-                })
-            except Exception as e:
-                logger.warning(f"Failed to load embedding for stem {stem.id}: {e}")
-                continue
+            stems_data.append({
+                'stem': stem,
+                'embedding': stem.audio_embedding
+            })
         
         return stems_data
     
@@ -154,5 +144,3 @@ class SearchService:
             logger.error(f"Error calculating cosine similarity: {e}")
             return 0.0
 
-# Global search service instance
-search_service = SearchService()

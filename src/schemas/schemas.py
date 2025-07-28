@@ -1,537 +1,1045 @@
-"""Pydantic-Schemas für die Neuromorphe Traum-Engine v2.0
-
-Diese Datei definiert alle Pydantic-Modelle für API-Validierung und Serialisierung.
-"""
-
+from pydantic import BaseModel
+from pydantic import Field, ConfigDict, field_validator
+from typing import Any, Optional, List, Dict, Union
 from datetime import datetime
-from typing import Optional, List, Dict, Any, Union
-from pydantic import BaseModel, Field, validator, root_validator
 from enum import Enum
 
+# From api.py
+class APIResponse(BaseModel):
+    success: bool
+    message: Optional[str] = None
+    data: Optional[Any] = None
 
-# Enums für bessere Typisierung
-class ProcessingStatus(str, Enum):
+class APIError(BaseModel):
+    detail: str
+
+class APISuccess(BaseModel):
+    message: str
+
+class APIPagination(BaseModel):
+    page: int
+    per_page: int
+    total_items: int
+    total_pages: int
+
+class APIFilter(BaseModel):
+    field: str
+    operator: str
+    value: Any
+
+class HealthCheck(BaseModel):
+    status: str
+    version: str
+    database_status: str
+    message: Optional[str] = None
+
+class HealthStatus(BaseModel):
+    status: str
+    message: Optional[str] = None
+
+class SystemInfo(BaseModel):
+    python_version: str
+    os_name: str
+    processor_type: str
+    total_memory_gb: float
+    available_memory_gb: float
+    cpu_usage_percent: float
+    disk_usage_percent: float
+
+class ServiceStatus(BaseModel):
+    service_name: str
+    status: str
+    message: Optional[str] = None
+
+class AnalysisRequest(BaseModel):
+    file_path: str
+    analysis_type: str
+
+class AnalysisResponse(BaseModel):
+    file_path: str
+    analysis_type: str
+    result: Dict[str, Any]
+
+class SimilarityRequest(BaseModel):
+    embedding_1: List[float]
+    embedding_2: List[float]
+
+class SimilarityResponse(BaseModel):
+    similarity_score: float
+
+class UploadRequest(BaseModel):
+    file_name: str
+    content_type: str
+    file_size: int
+
+class UploadResponse(BaseModel):
+    file_path: str
+    message: str
+
+class DownloadRequest(BaseModel):
+    file_path: str
+
+class DownloadResponse(BaseModel):
+    file_path: str
+    message: str
+
+class SearchRequest(BaseModel):
+    query: str
+    top_k: int = 5
+    category_filter: Optional[str] = None
+    bpm_range: Optional[List[float]] = None
+
+# From arrangement.py
+class ArrangementStem(BaseModel):
+    stem_id: int
+    start_offset_bars: int
+    duration_bars: int
+
+class ArrangementSection(BaseModel):
+    section: str
+    bars: int
+    stem_queries: List[Dict[str, Any]]
+    volume: float = 1.0
+    effects: Optional[List[str]] = None
+
+class ArrangementTransition(BaseModel):
+    from_section: str
+    to_section: str
+    transition_type: str
+    duration_bars: int
+    effects: Optional[List[str]] = None
+
+class ArrangementStructure(BaseModel):
+    sections: List[ArrangementSection]
+    transitions: Optional[List[ArrangementTransition]] = None
+
+class ArrangementMetadata(BaseModel):
+    created_with_musical_intelligence: bool
+    harmonic_coherence: bool
+    key_compatibility_used: bool
+
+class ArrangementCreate(BaseModel):
+    bpm: int
+    total_bars: int
+    track_structure: Dict[str, Any]
+    stems: List[int]
+
+class ArrangementUpdate(BaseModel):
+    bpm: Optional[int] = None
+    total_bars: Optional[int] = None
+    track_structure: Optional[Dict[str, Any]] = None
+    stems: Optional[List[int]] = None
+
+class ArrangementBase(BaseModel):
+    bpm: int
+    total_bars: int
+    track_structure: Dict[str, Any]
+    stems: List[int]
+
+class ArrangementResponse(BaseModel):
+    arrangement_id: str
+    prompt: str
+    global_key: str
+    bpm: int
+    genre: str
+    mood: List[str]
+    total_bars: int
+    estimated_duration: float
+    structure: List[Dict[str, Any]]
+    metadata: Dict[str, Any]
+
+# From config.py
+class ConfigDataType(str, Enum):
+    """Datentyp einer Konfigurationseinstellung"""
+    STRING = "string"
+    INTEGER = "integer"
+    FLOAT = "float"
+    BOOLEAN = "boolean"
+    JSON = "json"
+    LIST = "list"
+
+class ConfigCategory(str, Enum):
+    """Kategorie einer Konfigurationseinstellung"""
+    AUDIO = "audio"
+    PROCESSING = "processing"
+    UI = "ui"
+    DATABASE = "database"
+    API = "api"
+    SECURITY = "security"
+    LOGGING = "logging"
+    PERFORMANCE = "performance"
+    GENERATION = "generation"
+    ANALYSIS = "analysis"
+
+class ConfigurationSettingBase(BaseModel):
+    """Basis-Schema für Konfigurationseinstellungen"""
+    category: ConfigCategory
+    key: str = Field(..., min_length=1, max_length=200)
+    value: Union[str, int, float, bool, Dict[str, Any], List[Any]] = Field(..., description="Konfigurationswert")
+    
+    # Metadaten
+    description: Optional[str] = Field(None, description="Beschreibung der Einstellung")
+    data_type: ConfigDataType
+    is_user_configurable: bool = Field(True, description="Kann vom Benutzer geändert werden")
+    requires_restart: bool = Field(False, description="Erfordert Neustart nach Änderung")
+    
+    # Validierung
+    validation_rules: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Validierungsregeln")
+    default_value: Optional[Union[str, int, float, bool, Dict[str, Any], List[Any]]] = Field(None, description="Standardwert")
+    
+    @field_validator('value')
+    @classmethod
+    def validate_value_type(cls, v, info):
+        """Validiert, dass der Wert dem angegebenen Datentyp entspricht"""
+        if not hasattr(info, 'data') or 'data_type' not in info.data:
+            return v
+            
+        data_type = info.data['data_type']
+        
+        if data_type == ConfigDataType.STRING and not isinstance(v, str):
+            raise ValueError('Value must be a string')
+        elif data_type == ConfigDataType.INTEGER and not isinstance(v, int):
+            raise ValueError('Value must be an integer')
+        elif data_type == ConfigDataType.FLOAT and not isinstance(v, (int, float)):
+            raise ValueError('Value must be a number')
+        elif data_type == ConfigDataType.BOOLEAN and not isinstance(v, bool):
+            raise ValueError('Value must be a boolean')
+        elif data_type == ConfigDataType.LIST and not isinstance(v, list):
+            raise ValueError('Value must be a list')
+        elif data_type == ConfigDataType.JSON and not isinstance(v, (dict, list)):
+            raise ValueError('Value must be a JSON object or array')
+            
+        return v
+    model_config = ConfigDict(use_enum_values=True)
+
+class ConfigurationSettingCreate(ConfigurationSettingBase):
+    """Schema für die Erstellung einer Konfigurationseinstellung"""
+    pass
+
+class ConfigurationSettingUpdate(BaseModel):
+    """Schema für die Aktualisierung einer Konfigurationseinstellung"""
+    value: Optional[Union[str, int, float, bool, Dict[str, Any], List[Any]]] = None
+    description: Optional[str] = None
+    is_user_configurable: Optional[bool] = None
+    requires_restart: Optional[bool] = None
+    validation_rules: Optional[Dict[str, Any]] = None
+    default_value: Optional[Union[str, int, float, bool, Dict[str, Any], List[Any]]] = None
+    model_config = ConfigDict(use_enum_values=True)
+
+class ConfigurationSettingResponse(ConfigurationSettingBase):
+    """Schema für die Antwort mit Konfigurationsdaten"""
+    id: int
+    
+    # Zeitstempel
+    created_at: datetime
+    updated_at: datetime
+    model_config = ConfigDict(from_attributes=True, use_enum_values=True)
+
+class ConfigurationSearch(BaseModel):
+    """Schema für Konfigurationssuche"""
+    category: Optional[ConfigCategory] = None
+    key_pattern: Optional[str] = Field(None, max_length=200, description="Suchpattern für Schlüssel")
+    data_type: Optional[ConfigDataType] = None
+    is_user_configurable: Optional[bool] = None
+    requires_restart: Optional[bool] = None
+    
+    # Paginierung
+    skip: int = Field(0, ge=0)
+    limit: int = Field(50, ge=1, le=200)
+    
+    # Sortierung
+    order_by: str = Field("category", pattern=r"^(category|key|data_type|created_at|updated_at)$")
+    order_desc: bool = Field(False)
+    model_config = ConfigDict(use_enum_values=True)
+
+class ConfigurationBatch(BaseModel):
+    """Schema für Batch-Operationen mit Konfigurationen"""
+    settings: List[ConfigurationSettingCreate] = Field(..., min_length=1, max_length=100)
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "settings": [
+                {
+                    "category": "audio",
+                    "key": "sample_rate",
+                    "value": 44100,
+                    "data_type": "integer",
+                    "description": "Standard-Samplerate für Audio-Verarbeitung",
+                    "validation_rules": {"min": 8000, "max": 192000}
+                },
+                {
+                    "category": "processing",
+                    "key": "max_workers",
+                    "value": 4,
+                    "data_type": "integer",
+                    "description": "Maximale Anzahl Worker-Threads",
+                    "requires_restart": True
+                }
+            ]
+        }
+    })
+
+class ConfigurationExport(BaseModel):
+    """Schema für Konfigurationsexport"""
+    categories: Optional[List[ConfigCategory]] = Field(None, description="Zu exportierende Kategorien")
+    include_system_settings: bool = Field(False, description="System-Einstellungen einschließen")
+    format: str = Field("json", pattern=r"^(json|yaml|env)$", description="Export-Format")
+    model_config = ConfigDict(use_enum_values=True)
+
+class ConfigurationImport(BaseModel):
+    """Schema für Konfigurationsimport"""
+    settings: Dict[str, Dict[str, Any]] = Field(..., description="Konfigurationen gruppiert nach Kategorie")
+    overwrite_existing: bool = Field(False, description="Bestehende Einstellungen überschreiben")
+    validate_only: bool = Field(False, description="Nur validieren, nicht importieren")
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "settings": {
+                "audio": {
+                    "sample_rate": 44100,
+                    "bit_depth": 24,
+                    "channels": 2
+                },
+                "processing": {
+                    "max_workers": 4,
+                    "chunk_size": 1024
+                }
+            },
+            "overwrite_existing": True,
+            "validate_only": False
+        }
+    })
+
+class ConfigurationStats(BaseModel):
+    """Schema für Konfigurationsstatistiken"""
+    total_settings: int
+    user_configurable: int
+    system_settings: int
+    requires_restart_count: int
+    
+    # Verteilung nach Kategorie
+    category_distribution: Dict[str, int] = Field(default_factory=dict)
+    
+    # Verteilung nach Datentyp
+    data_type_distribution: Dict[str, int] = Field(default_factory=dict)
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "total_settings": 45,
+            "user_configurable": 32,
+            "system_settings": 13,
+            "requires_restart_count": 8,
+            "category_distribution": {
+                "audio": 12,
+                "processing": 10,
+                "ui": 8,
+                "database": 6
+            },
+            "data_type_distribution": {
+                "string": 18,
+                "integer": 12,
+                "boolean": 10,
+                "float": 5
+            }
+        }
+    })
+
+# From job.py
+class JobType(str, Enum):
+    """Typ eines Verarbeitungsauftrags"""
+    PREPROCESS = "preprocess"
+    GENERATE = "generate"
+    ANALYZE = "analyze"
+    EXPORT = "export"
+    CLEANUP = "cleanup"
+
+class JobStatus(str, Enum):
+    """Status eines Verarbeitungsauftrags"""
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+    PAUSED = "paused"
+
+class ProcessingJobBase(BaseModel):
+    """Basis-Schema für Verarbeitungsaufträge"""
+    job_type: JobType
+    job_status: JobStatus = Field(JobStatus.PENDING)
+    priority: int = Field(5, ge=1, le=10, description="Priorität: 1 (hoch) bis 10 (niedrig)")
+    
+    # Eingabedaten
+    input_data: Dict[str, Any] = Field(..., description="Job-spezifische Eingabedaten")
+    parameters: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Zusätzliche Parameter")
+    
+    # Ausgabedaten
+    output_data: Optional[Dict[str, Any]] = Field(None, description="Job-Ergebnisse")
+    error_message: Optional[str] = Field(None, max_length=1000)
+    error_traceback: Optional[str] = Field(None)
+    
+    # Progress-Tracking
+    progress_percentage: float = Field(0.0, ge=0.0, le=100.0)
+    current_step: Optional[str] = Field(None, max_length=200)
+    total_steps: Optional[int] = Field(None, ge=1)
+    
+    # Ressourcen-Verbrauch
+    cpu_time: Optional[float] = Field(None, ge=0.0, description="CPU-Zeit in Sekunden")
+    memory_peak: Optional[int] = Field(None, ge=0, description="Peak-Memory in MB")
+    model_config = ConfigDict(use_enum_values=True)
+
+class ProcessingJobCreate(ProcessingJobBase):
+    """Schema für die Erstellung eines Verarbeitungsauftrags"""
+    pass
+
+class ProcessingJobUpdate(BaseModel):
+    """Schema für die Aktualisierung eines Verarbeitungsauftrags"""
+    job_status: Optional[JobStatus] = None
+    priority: Optional[int] = Field(None, ge=1, le=10)
+    
+    # Ausgabedaten
+    output_data: Optional[Dict[str, Any]] = None
+    error_message: Optional[str] = Field(None, max_length=1000)
+    error_traceback: Optional[str] = None
+    
+    # Progress-Tracking
+    progress_percentage: Optional[float] = Field(None, ge=0.0, le=100.0)
+    current_step: Optional[str] = Field(None, max_length=200)
+    total_steps: Optional[int] = Field(None, ge=1)
+    
+    # Ressourcen-Verbrauch
+    cpu_time: Optional[float] = Field(None, ge=0.0)
+    memory_peak: Optional[int] = Field(None, ge=0)
+    model_config = ConfigDict(use_enum_values=True)
+
+class ProcessingJobResponse(ProcessingJobBase):
+    """Schema für die Antwort mit Job-Daten"""
+    id: int
+    
+    # Zeitstempel
+    created_at: datetime
+    updated_at: datetime
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    
+    # Berechnete Felder
+    duration: Optional[float] = Field(None, description="Ausführungszeit in Sekunden")
+    model_config = ConfigDict(from_attributes=True, use_enum_values=True)
+
+class ProcessingJobSearch(BaseModel):
+    """Schema für Job-Suche"""
+    job_type: Optional[JobType] = None
+    job_status: Optional[JobStatus] = None
+    priority_min: Optional[int] = Field(None, ge=1, le=10)
+    priority_max: Optional[int] = Field(None, ge=1, le=10)
+    
+    # Zeitraum-Filter
+    created_after: Optional[datetime] = None
+    created_before: Optional[datetime] = None
+    completed_after: Optional[datetime] = None
+    completed_before: Optional[datetime] = None
+    
+    # Progress-Filter
+    progress_min: Optional[float] = Field(None, ge=0.0, le=100.0)
+    progress_max: Optional[float] = Field(None, ge=0.0, le=100.0)
+    
+    # Paginierung
+    skip: int = Field(0, ge=0)
+    limit: int = Field(50, ge=1, le=100)
+    
+    # Sortierung
+    order_by: str = Field("created_at", pattern=r"^(created_at|updated_at|priority|progress_percentage|job_type|job_status)$")
+    order_desc: bool = Field(True)
+    model_config = ConfigDict(use_enum_values=True)
+
+class ProcessingJobStats(BaseModel):
+    """Schema für Job-Statistiken"""
+    total_jobs: int
+    pending_jobs: int
+    running_jobs: int
+    completed_jobs: int
+    failed_jobs: int
+    cancelled_jobs: int
+    
+    # Durchschnittswerte
+    avg_duration: Optional[float] = Field(None, description="Durchschnittliche Ausführungszeit in Sekunden")
+    avg_cpu_time: Optional[float] = Field(None, description="Durchschnittliche CPU-Zeit in Sekunden")
+    avg_memory_peak: Optional[float] = Field(None, description="Durchschnittlicher Peak-Memory in MB")
+    
+    # Verteilung nach Typ
+    job_type_distribution: Dict[str, int] = Field(default_factory=dict)
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "total_jobs": 150,
+            "pending_jobs": 5,
+            "running_jobs": 2,
+            "completed_jobs": 140,
+            "failed_jobs": 3,
+            "cancelled_jobs": 0,
+            "avg_duration": 45.2,
+            "avg_cpu_time": 38.7,
+            "avg_memory_peak": 512,
+            "job_type_distribution": {
+                "preprocess": 80,
+                "generate": 50,
+                "analyze": 20
+            }
+        }
+    })
+
+# From metric.py
+class MetricType(str, Enum):
+    """Typ einer System-Metrik"""
+    CPU = "cpu"
+    MEMORY = "memory"
+    DISK = "disk"
+    PROCESSING = "processing"
+    NETWORK = "network"
+    DATABASE = "database"
+    API = "api"
+    AUDIO = "audio"
+
+class SystemMetricBase(BaseModel):
+    """Basis-Schema für System-Metriken"""
+    metric_type: MetricType
+    metric_name: str = Field(..., min_length=1, max_length=100)
+    metric_value: float
+    metric_unit: Optional[str] = Field(None, max_length=20, description="Einheit wie %, MB, seconds, etc.")
+    
+    # Kontext und Tags
+    context: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Zusätzlicher Kontext")
+    tags: Optional[Dict[str, str]] = Field(default_factory=dict, description="Tags für Gruppierung")
+    model_config = ConfigDict(use_enum_values=True)
+
+class SystemMetricCreate(SystemMetricBase):
+    """Schema für die Erstellung einer System-Metrik"""
+    timestamp: Optional[datetime] = Field(None, description="Zeitstempel, falls nicht angegeben wird aktuelle Zeit verwendet")
+
+class SystemMetricResponse(SystemMetricBase):
+    """Schema für die Antwort mit Metrik-Daten"""
+    id: int
+    timestamp: datetime
+    model_config = ConfigDict(from_attributes=True, use_enum_values=True)
+
+class SystemMetricSearch(BaseModel):
+    """Schema für Metrik-Suche"""
+    metric_type: Optional[MetricType] = None
+    metric_name: Optional[str] = Field(None, max_length=100)
+    
+    # Wert-Filter
+    value_min: Optional[float] = None
+    value_max: Optional[float] = None
+    
+    # Zeitraum-Filter
+    timestamp_after: Optional[datetime] = None
+    timestamp_before: Optional[datetime] = None
+    
+    # Tag-Filter
+    tags: Optional[Dict[str, str]] = Field(default_factory=dict)
+    
+    # Paginierung
+    skip: int = Field(0, ge=0)
+    limit: int = Field(100, ge=1, le=1000)
+    
+    # Sortierung
+    order_by: str = Field("timestamp", pattern=r"^(timestamp|metric_type|metric_name|metric_value)$")
+    order_desc: bool = Field(True)
+    model_config = ConfigDict(use_enum_values=True)
+
+class MetricAggregation(BaseModel):
+    """Schema für aggregierte Metriken"""
+    metric_type: MetricType
+    metric_name: str
+    
+    # Aggregierte Werte
+    count: int
+    min_value: float
+    max_value: float
+    avg_value: float
+    sum_value: float
+    
+    # Zeitraum
+    period_start: datetime
+    period_end: datetime
+    model_config = ConfigDict(use_enum_values=True)
+
+class SystemMetricsBatch(BaseModel):
+    """Schema für Batch-Erstellung von Metriken"""
+    metrics: List[SystemMetricCreate] = Field(..., min_length=1, max_length=1000)
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "metrics": [
+                {
+                    "metric_type": "cpu",
+                    "metric_name": "usage_percent",
+                    "metric_value": 75.5,
+                    "metric_unit": "%",
+                    "context": {"core": 0},
+                    "tags": {"host": "server-01"}
+                },
+                {
+                    "metric_type": "memory",
+                    "metric_name": "used_mb",
+                    "metric_unit": "MB",
+                    "metric_value": 2048,
+                    "tags": {"host": "server-01"}
+                }
+            ]
+        }
+    })
+
+class SystemMetricsStats(BaseModel):
+    """Schema für Metrik-Statistiken"""
+    total_metrics: int
+    unique_types: int
+    unique_names: int
+    
+    # Zeitraum
+    oldest_metric: Optional[datetime] = None
+    newest_metric: Optional[datetime] = None
+    
+    # Verteilung nach Typ
+    type_distribution: Dict[str, int] = Field(default_factory=dict)
+    
+    # Top Metriken
+    top_metrics_by_count: List[Dict[str, Any]] = Field(default_factory=list)
+    # TODO[pydantic]: The following keys were removed: `json_encoders`.
+    # Check https://docs.pydantic.dev/dev-v2/migration/#changes-to-config for more information.
+    model_config = ConfigDict(json_encoders={
+        datetime: lambda v: v.isoformat()
+    }, json_schema_extra={
+        "example": {
+            "total_metrics": 50000,
+            "unique_types": 8,
+            "unique_names": 25,
+            "oldest_metric": "2024-01-01T00:00:00Z",
+            "newest_metric": "2024-07-28T16:00:00Z",
+            "type_distribution": {
+                "cpu": 15000,
+                "memory": 12000,
+                "processing": 8000,
+                "disk": 5000
+            },
+            "top_metrics_by_count": [
+                {"metric_name": "cpu_usage_percent", "count": 8000},
+                {"metric_name": "memory_used_mb", "count": 6000}
+            ]
+        }
+    })
+
+# From render.py
+class RenderStatus(str, Enum):
     PENDING = "pending"
     PROCESSING = "processing"
     COMPLETED = "completed"
     FAILED = "failed"
-    QUARANTINED = "quarantined"
 
+class RenderPriority(int, Enum):
+    LOW = 1
+    MEDIUM = 5
+    HIGH = 10
 
-class GenerationStatus(str, Enum):
-    PENDING = "pending"
-    ANALYZING = "analyzing"
-    ARRANGING = "arranging"
-    RENDERING = "rendering"
-    COMPLETED = "completed"
-    FAILED = "failed"
+class RenderFormat(str, Enum):
+    WAV = "wav"
+    MP3 = "mp3"
+    FLAC = "flac"
+    OGG = "ogg"
 
-
-class EnergyLevel(str, Enum):
+class RenderQuality(str, Enum):
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
-    EXTREME = "extreme"
+    LOSSLESS = "lossless"
 
+class RenderProgress(BaseModel):
+    job_id: str
+    progress: float
+    current_step: str
+    message: Optional[str] = None
 
-class ComplexityLevel(str, Enum):
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
+class RenderSettings(BaseModel):
+    sample_rate: Optional[int] = None
+    bit_depth: Optional[int] = None
+    normalize: Optional[bool] = None
+    apply_mastering: Optional[bool] = None
+    fade_in: Optional[float] = None
+    fade_out: Optional[float] = None
 
+class RenderJobCreate(BaseModel):
+    arrangement_id: str
+    format: str
+    quality: str
+    options: Optional[Dict[str, Any]] = None
 
-class QualityRating(str, Enum):
-    POOR = "poor"
-    FAIR = "fair"
-    GOOD = "good"
-    EXCELLENT = "excellent"
+class RenderJobUpdate(BaseModel):
+    arrangement_id: Optional[str] = None
+    format: Optional[str] = None
+    quality: Optional[str] = None
+    status: Optional[str] = None
+    progress: Optional[float] = None
+    output_path: Optional[str] = None
+    error_message: Optional[str] = None
+    options: Optional[Dict[str, Any]] = None
 
+class RenderJobBase(BaseModel):
+    arrangement_id: str
+    format: str
+    quality: str
+    status: Optional[str] = "pending"
+    progress: Optional[float] = 0.0
+    output_path: Optional[str] = None
+    error_message: Optional[str] = None
+    options: Optional[Dict[str, Any]] = None
 
-class JobType(str, Enum):
-    PREPROCESS = "preprocess"
-    GENERATE = "generate"
-    ANALYZE = "analyze"
-    CLEANUP = "cleanup"
-
-
-# Base-Schemas
-class BaseSchema(BaseModel):
-    """Basis-Schema mit gemeinsamen Konfigurationen"""
-    
-    class Config:
-        orm_mode = True
-        use_enum_values = True
-        validate_assignment = True
-
-
-# Stem-Schemas
-class StemBase(BaseSchema):
-    """Basis-Schema für Stems"""
-    filename: str = Field(..., min_length=1, max_length=255)
-    duration: Optional[float] = Field(None, ge=0)
-    sample_rate: Optional[int] = Field(None, ge=8000, le=192000)
-    channels: Optional[int] = Field(None, ge=1, le=8)
-    bit_depth: Optional[int] = Field(None, ge=8, le=32)
-    
-    # Musiktheorie
-    key: Optional[str] = Field(None, max_length=10)
-    bpm: Optional[float] = Field(None, ge=20, le=300)
-    time_signature: Optional[str] = Field(None, max_length=10)
-    
-    # Kategorisierung
-    instrument: Optional[str] = Field(None, max_length=100)
-    genre: Optional[str] = Field(None, max_length=100)
-    mood: Optional[str] = Field(None, max_length=100)
-    energy_level: Optional[EnergyLevel] = None
-    
-    # Tags
-    auto_tags: Optional[List[str]] = Field(default_factory=list)
-    manual_tags: Optional[List[str]] = Field(default_factory=list)
-
-
-class StemCreate(StemBase):
-    """Schema für Stem-Erstellung"""
-    original_path: str = Field(..., min_length=1, max_length=500)
-    file_hash: str = Field(..., min_length=32, max_length=64)
-    file_size: int = Field(..., ge=0)
-
-
-class StemUpdate(BaseSchema):
-    """Schema für Stem-Updates"""
-    filename: Optional[str] = Field(None, min_length=1, max_length=255)
-    key: Optional[str] = Field(None, max_length=10)
-    bpm: Optional[float] = Field(None, ge=20, le=300)
-    time_signature: Optional[str] = Field(None, max_length=10)
-    instrument: Optional[str] = Field(None, max_length=100)
-    genre: Optional[str] = Field(None, max_length=100)
-    mood: Optional[str] = Field(None, max_length=100)
-    energy_level: Optional[EnergyLevel] = None
-    manual_tags: Optional[List[str]] = Field(default_factory=list)
-    processing_status: Optional[ProcessingStatus] = None
-
-
-class StemResponse(StemBase):
-    """Schema für Stem-Antworten"""
+class RenderJobResponse(BaseModel):
     id: int
+    arrangement_id: str
+    format: str
+    quality: str
+    status: str
+    progress: float
+    output_path: Optional[str] = None
+    error_message: Optional[str] = None
+    options: Optional[Dict[str, Any]] = None
+
+# From stem.py
+class StemBase(BaseModel):
+    filename: str
     original_path: str
     processed_path: Optional[str] = None
     file_hash: str
+    duration: float
+    sample_rate: int
+    channels: int
+    bit_depth: Optional[int] = None
     file_size: int
-    
-    # Neuromorphe Analyse
+    bpm: Optional[float] = None
+    key: Optional[str] = None
+    time_signature: Optional[str] = None
+    category: Optional[str] = None
+    genre: Optional[str] = None
+    mood: Optional[str] = None
+    energy_level: Optional[str] = None
+    source: str
+    auto_tags: Optional[List[str]] = None
+    manual_tags: Optional[List[str]] = None
     audio_embedding: Optional[List[float]] = None
     semantic_analysis: Optional[Dict[str, Any]] = None
     pattern_analysis: Optional[Dict[str, Any]] = None
     neural_features: Optional[Dict[str, Any]] = None
     perceptual_mapping: Optional[Dict[str, Any]] = None
-    
-    # Qualität
-    quality_score: Optional[float] = Field(None, ge=0, le=1)
-    complexity_level: Optional[ComplexityLevel] = None
-    recommended_usage: Optional[List[str]] = Field(default_factory=list)
-    
-    # Status
-    processing_status: ProcessingStatus
+    harmonic_complexity: Optional[float] = None
+    rhythmic_complexity: Optional[float] = None
+    quality_score: Optional[float] = None
+    complexity_level: Optional[str] = None
+    recommended_usage: Optional[List[str]] = None
+    processing_status: Optional[str] = None
     processing_error: Optional[str] = None
-    
-    # Zeitstempel
-    created_at: datetime
-    updated_at: datetime
-    processed_at: Optional[datetime] = None
 
+class StemCreate(StemBase):
+    pass
 
-class StemSearchRequest(BaseSchema):
-    """Schema für Stem-Suche"""
-    query: Optional[str] = Field(None, min_length=1, max_length=500)
-    instrument: Optional[str] = Field(None, max_length=100)
-    genre: Optional[str] = Field(None, max_length=100)
-    mood: Optional[str] = Field(None, max_length=100)
-    energy_level: Optional[EnergyLevel] = None
-    key: Optional[str] = Field(None, max_length=10)
-    bpm_min: Optional[float] = Field(None, ge=20, le=300)
-    bpm_max: Optional[float] = Field(None, ge=20, le=300)
-    quality_min: Optional[float] = Field(None, ge=0, le=1)
-    complexity_level: Optional[ComplexityLevel] = None
-    processing_status: Optional[ProcessingStatus] = None
-    limit: int = Field(50, ge=1, le=200)
-    offset: int = Field(0, ge=0)
-    
-    @validator('bpm_max')
-    def validate_bpm_range(cls, v, values):
-        if v is not None and 'bpm_min' in values and values['bpm_min'] is not None:
-            if v < values['bpm_min']:
-                raise ValueError('bpm_max must be greater than or equal to bpm_min')
-        return v
+class StemUpdate(StemBase):
+    filename: Optional[str] = None
+    original_path: Optional[str] = None
+    file_hash: Optional[str] = None
+    duration: Optional[float] = None
+    sample_rate: Optional[int] = None
+    channels: Optional[int] = None
+    bit_depth: Optional[int] = None
+    file_size: Optional[int] = None
 
+class StemResponse(StemBase):
+    id: int
 
-# Track-Schemas
-class TrackBase(BaseSchema):
-    """Basis-Schema für Tracks"""
+    class Config:
+        from_attributes = True
+
+class StemList(BaseModel):
+    stems: List[StemResponse]
+    total_count: int
+
+class SearchResult(BaseModel):
+    stem: StemResponse
+    similarity_score: float
+
+class StemSearch(BaseModel):
+    query_text: Optional[str] = None
+    category: Optional[str] = None
+    genre: Optional[str] = None
+    mood: Optional[str] = None
+    energy_level: Optional[str] = None
+    key: Optional[str] = None
+    bpm_min: Optional[float] = None
+    bpm_max: Optional[float] = None
+    quality_min: Optional[float] = None
+    processing_status: Optional[str] = None
+    harmonic_complexity_min: Optional[float] = None
+    harmonic_complexity_max: Optional[float] = None
+    rhythmic_complexity_min: Optional[float] = None
+    rhythmic_complexity_max: Optional[float] = None
+    compatible_keys: Optional[List[str]] = None
+    audio_embedding_is_not_null: Optional[bool] = None
+    audio_embedding_is_null: Optional[bool] = None
+
+class StemMetadata(BaseModel):
+    bpm: Optional[float] = None
+    key: Optional[str] = None
+    category: Optional[str] = None
+    genre: Optional[str] = None
+    mood: Optional[str] = None
+    energy_level: Optional[str] = None
+    auto_tags: Optional[List[str]] = None
+    harmonic_complexity: Optional[float] = None
+    rhythmic_complexity: Optional[float] = None
+    quality_score: Optional[float] = None
+    complexity_level: Optional[str] = None
+
+class StemFeatures(BaseModel):
+    spectral_centroid: Optional[float] = None
+    mfcc: Optional[List[float]] = None
+
+class StemAnalysis(BaseModel):
+    file_info: Dict[str, Any]
+    temporal: Dict[str, Any]
+    spectral: Dict[str, Any]
+    rhythmic: Dict[str, Any]
+    harmonic: Dict[str, Any]
+    perceptual: Dict[str, Any]
+    classification: Dict[str, Any]
+
+class StemSimilarity(BaseModel):
+    stem_id_1: int
+    stem_id_2: int
+    similarity_score: float
+
+class StemBatch(BaseModel):
+    stem_ids: List[int]
+
+# From track.py
+class TrackStatus(str, Enum):
+    """Status eines generierten Tracks"""
+    PENDING = "pending"
+    GENERATING = "generating"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+class GeneratedTrackBase(BaseModel):
+    """Basis-Schema für generierte Tracks"""
     title: str = Field(..., min_length=1, max_length=255)
     description: Optional[str] = Field(None, max_length=1000)
+    original_prompt: str = Field(..., min_length=1)
+    
+    # Audio-Eigenschaften
+    duration: Optional[float] = Field(None, ge=0)
+    sample_rate: int = Field(44100, ge=8000, le=192000)
+    channels: int = Field(2, ge=1, le=8)
+    file_size: Optional[int] = Field(None, ge=0)
     
     # Musik-Parameter
     target_bpm: Optional[float] = Field(None, ge=20, le=300)
     target_key: Optional[str] = Field(None, max_length=10)
     target_genre: Optional[str] = Field(None, max_length=100)
     target_mood: Optional[str] = Field(None, max_length=100)
-    target_energy: Optional[EnergyLevel] = None
+    target_energy: Optional[str] = Field(None, max_length=50)
     
-    # Metadaten
-    tags: Optional[List[str]] = Field(default_factory=list)
+    # Generierungs-Parameter
+    generation_model: Optional[str] = Field(None, max_length=100)
+    generation_parameters: Optional[Dict[str, Any]] = Field(default_factory=dict)
+    
+    # Qualität und Bewertung
+    quality_score: Optional[float] = Field(None, ge=0, le=1)
+    user_rating: Optional[int] = Field(None, ge=1, le=5)
+    
+    # Status und Metadaten
+    status: TrackStatus = Field(TrackStatus.PENDING)
+    error_message: Optional[str] = Field(None, max_length=1000)
+    processing_time: Optional[float] = Field(None, ge=0)
+    
+    # Tags und Kategorisierung
+    tags: List[str] = Field(default_factory=list)
+    is_public: bool = Field(False)
+    is_featured: bool = Field(False)
+    # TODO[pydantic]: The following keys were removed: `json_encoders`.
+    # Check https://docs.pydantic.dev/dev-v2/migration/#changes-to-config for more information.
+    model_config = ConfigDict(use_enum_values=True)
 
+class GeneratedTrackCreate(GeneratedTrackBase):
+    """Schema für die Erstellung eines generierten Tracks"""
+    pass
 
-class TrackCreate(TrackBase):
-    """Schema für Track-Erstellung"""
-    original_prompt: str = Field(..., min_length=1, max_length=2000)
-    sample_rate: int = Field(44100, ge=22050, le=192000)
-    channels: int = Field(2, ge=1, le=8)
-
-
-class TrackUpdate(BaseSchema):
-    """Schema für Track-Updates"""
+class GeneratedTrackUpdate(BaseModel):
+    """Schema für die Aktualisierung eines generierten Tracks"""
     title: Optional[str] = Field(None, min_length=1, max_length=255)
     description: Optional[str] = Field(None, max_length=1000)
+    
+    # Audio-Eigenschaften
+    duration: Optional[float] = Field(None, ge=0)
+    file_size: Optional[int] = Field(None, ge=0)
+    
+    # Musik-Parameter
     target_bpm: Optional[float] = Field(None, ge=20, le=300)
     target_key: Optional[str] = Field(None, max_length=10)
     target_genre: Optional[str] = Field(None, max_length=100)
     target_mood: Optional[str] = Field(None, max_length=100)
-    target_energy: Optional[EnergyLevel] = None
-    tags: Optional[List[str]] = Field(default_factory=list)
-    generation_status: Optional[GenerationStatus] = None
-
-
-class TrackResponse(TrackBase):
-    """Schema für Track-Antworten"""
-    id: int
-    original_prompt: str
+    target_energy: Optional[str] = Field(None, max_length=50)
     
-    # Datei-Informationen
+    # Qualität und Bewertung
+    quality_score: Optional[float] = Field(None, ge=0, le=1)
+    user_rating: Optional[int] = Field(None, ge=1, le=5)
+    
+    # Status und Metadaten
+    status: Optional[TrackStatus] = None
+    error_message: Optional[str] = Field(None, max_length=1000)
+    processing_time: Optional[float] = Field(None, ge=0)
+    
+    # Tags und Kategorisierung
+    tags: Optional[List[str]] = None
+    is_public: Optional[bool] = None
+    is_featured: Optional[bool] = None
+    model_config = ConfigDict(use_enum_values=True)
+
+class GeneratedTrackResponse(GeneratedTrackBase):
+    """Schema für die Antwort mit Track-Daten"""
+    id: int
     output_path: Optional[str] = None
     preview_path: Optional[str] = None
     file_hash: Optional[str] = None
-    duration: Optional[float] = Field(None, ge=0)
-    sample_rate: int
-    channels: int
-    file_size: Optional[int] = Field(None, ge=0)
-    
-    # Arrangement und Rendering
-    arrangement_plan: Optional[Dict[str, Any]] = None
-    track_structure: Optional[Dict[str, Any]] = None
-    rendering_settings: Optional[Dict[str, Any]] = None
-    master_effects: Optional[Dict[str, Any]] = None
-    
-    # Status und Qualität
-    generation_status: GenerationStatus
-    generation_error: Optional[str] = None
-    quality_rating: Optional[QualityRating] = None
-    
-    # Metadaten
-    metadata: Optional[Dict[str, Any]] = None
     
     # Zeitstempel
     created_at: datetime
     updated_at: datetime
-    generated_at: Optional[datetime] = None
+    
+    # Verwendete Stems
+    used_stems: List[int] = Field(default_factory=list)
+    # TODO[pydantic]: The following keys were removed: `json_encoders`.
+    # Check https://docs.pydantic.dev/dev-v2/migration/#changes-to-config for more information.
+    model_config = ConfigDict(from_attributes=True, use_enum_values=True)
 
-
-# Track-Stem-Schemas
-class TrackStemBase(BaseSchema):
-    """Basis-Schema für Track-Stem-Verknüpfungen"""
-    section_name: str = Field(..., min_length=1, max_length=100)
-    layer_name: str = Field(..., min_length=1, max_length=100)
-    start_time: float = Field(..., ge=0)
-    end_time: float = Field(..., ge=0)
+class GeneratedTrackSearch(BaseModel):
+    """Schema für Track-Suche"""
+    query: Optional[str] = Field(None, min_length=1, max_length=500)
+    genre: Optional[str] = Field(None, max_length=100)
+    mood: Optional[str] = Field(None, max_length=100)
+    energy: Optional[str] = Field(None, max_length=50)
+    key: Optional[str] = Field(None, max_length=10)
     
-    # Audio-Verarbeitung
-    volume: float = Field(1.0, ge=0, le=2.0)
-    pan: float = Field(0.0, ge=-1.0, le=1.0)
-    pitch_shift: float = Field(0.0, ge=-24.0, le=24.0)
-    time_stretch: float = Field(1.0, ge=0.25, le=4.0)
+    # BPM-Bereich
+    bpm_min: Optional[float] = Field(None, ge=20, le=300)
+    bpm_max: Optional[float] = Field(None, ge=20, le=300)
     
-    # Effekte
-    fade_in: float = Field(0.0, ge=0)
-    fade_out: float = Field(0.0, ge=0)
+    # Qualitäts-Filter
+    quality_min: Optional[float] = Field(None, ge=0, le=1)
+    rating_min: Optional[int] = Field(None, ge=1, le=5)
     
-    # Metadaten
-    usage_context: Optional[str] = Field(None, max_length=100)
-    importance: float = Field(1.0, ge=0, le=1.0)
+    # Status-Filter
+    status: Optional[TrackStatus] = None
+    is_public: Optional[bool] = None
+    is_featured: Optional[bool] = None
     
-    @validator('end_time')
-    def validate_time_range(cls, v, values):
-        if 'start_time' in values and v <= values['start_time']:
-            raise ValueError('end_time must be greater than start_time')
+    # Zeitraum-Filter
+    created_after: Optional[datetime] = None
+    created_before: Optional[datetime] = None
+    
+    # Paginierung
+    skip: int = Field(0, ge=0)
+    limit: int = Field(50, ge=1, le=100)
+    
+    # Sortierung
+    order_by: str = Field("created_at", pattern=r"^(created_at|updated_at|title|quality_score|user_rating|duration)$")
+    order_desc: bool = Field(True)
+    
+    @field_validator('bpm_max')
+    @classmethod
+    def validate_bpm_range(cls, v, info):
+        if v is not None and hasattr(info, 'data') and 'bpm_min' in info.data and info.data['bpm_min'] is not None:
+            if v < info.data['bpm_min']:
+                raise ValueError('bpm_max must be greater than or equal to bpm_min')
         return v
+    # TODO[pydantic]: The following keys were removed: `json_encoders`.
+    # Check https://docs.pydantic.dev/dev-v2/migration/#changes-to-config for more information.
+    model_config = ConfigDict(use_enum_values=True)
 
+class GeneratedTrackBatch(BaseModel):
+    """Schema für Batch-Operationen mit Tracks"""
+    track_ids: List[int] = Field(..., min_length=1, max_length=100)
+    operation: str = Field(..., pattern=r"^(delete|export|update_status|add_tags|remove_tags)$")
+    parameters: Optional[Dict[str, Any]] = Field(default_factory=dict)
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "track_ids": [1, 2, 3],
+            "operation": "add_tags",
+            "parameters": {
+                "tags": ["experimental", "ai-generated"]
+            }
+        }
+    })
 
-class TrackStemCreate(TrackStemBase):
-    """Schema für Track-Stem-Erstellung"""
-    track_id: int = Field(..., ge=1)
-    stem_id: int = Field(..., ge=1)
-    effects: Optional[Dict[str, Any]] = None
+# From websocket.py
+class WebSocketMessage(BaseModel):
+    event: str
+    payload: Any
+    timestamp: Optional[str] = None
 
+class WebSocketEvent(BaseModel):
+    event_type: str
+    data: Any
 
-class TrackStemUpdate(BaseSchema):
-    """Schema für Track-Stem-Updates"""
-    section_name: Optional[str] = Field(None, min_length=1, max_length=100)
-    layer_name: Optional[str] = Field(None, min_length=1, max_length=100)
-    start_time: Optional[float] = Field(None, ge=0)
-    end_time: Optional[float] = Field(None, ge=0)
-    volume: Optional[float] = Field(None, ge=0, le=2.0)
-    pan: Optional[float] = Field(None, ge=-1.0, le=1.0)
-    pitch_shift: Optional[float] = Field(None, ge=-24.0, le=24.0)
-    time_stretch: Optional[float] = Field(None, ge=0.25, le=4.0)
-    fade_in: Optional[float] = Field(None, ge=0)
-    fade_out: Optional[float] = Field(None, ge=0)
-    effects: Optional[Dict[str, Any]] = None
-    usage_context: Optional[str] = Field(None, max_length=100)
-    importance: Optional[float] = Field(None, ge=0, le=1.0)
-
-
-class TrackStemResponse(TrackStemBase):
-    """Schema für Track-Stem-Antworten"""
-    id: int
-    track_id: int
-    stem_id: int
-    effects: Optional[Dict[str, Any]] = None
-    created_at: datetime
-    
-    # Verknüpfte Daten
-    stem: Optional[StemResponse] = None
-
-
-# Processing Job Schemas
-class ProcessingJobBase(BaseSchema):
-    """Basis-Schema für Verarbeitungsaufträge"""
-    job_type: JobType
-    priority: int = Field(5, ge=1, le=10)
-    input_data: Dict[str, Any]
-    parameters: Optional[Dict[str, Any]] = None
-
-
-class ProcessingJobCreate(ProcessingJobBase):
-    """Schema für Job-Erstellung"""
-    pass
-
-
-class ProcessingJobUpdate(BaseSchema):
-    """Schema für Job-Updates"""
-    job_status: Optional[str] = Field(None, max_length=50)
-    progress_percentage: Optional[float] = Field(None, ge=0, le=100)
-    current_step: Optional[str] = Field(None, max_length=200)
-    output_data: Optional[Dict[str, Any]] = None
-    error_message: Optional[str] = None
-
-
-class ProcessingJobResponse(ProcessingJobBase):
-    """Schema für Job-Antworten"""
-    id: int
-    job_status: str
-    progress_percentage: float
-    current_step: Optional[str] = None
-    total_steps: Optional[int] = None
-    output_data: Optional[Dict[str, Any]] = None
-    error_message: Optional[str] = None
-    error_traceback: Optional[str] = None
-    cpu_time: Optional[float] = None
-    memory_peak: Optional[int] = None
-    created_at: datetime
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
-
-
-# Generation Request Schemas
-class GenerationRequest(BaseSchema):
-    """Schema für Track-Generierungsanfragen"""
-    prompt: str = Field(..., min_length=1, max_length=2000)
-    title: Optional[str] = Field(None, min_length=1, max_length=255)
-    
-    # Musik-Parameter (optional, werden aus Prompt extrahiert wenn nicht angegeben)
-    target_bpm: Optional[float] = Field(None, ge=20, le=300)
-    target_key: Optional[str] = Field(None, max_length=10)
-    target_genre: Optional[str] = Field(None, max_length=100)
-    target_mood: Optional[str] = Field(None, max_length=100)
-    target_energy: Optional[EnergyLevel] = None
-    target_duration: Optional[float] = Field(None, ge=10, le=600)  # 10 Sekunden bis 10 Minuten
-    
-    # Rendering-Optionen
-    sample_rate: int = Field(44100, ge=22050, le=192000)
-    channels: int = Field(2, ge=1, le=8)
-    apply_mastering: bool = Field(True)
-    create_preview: bool = Field(True)
-    
-    # Erweiterte Optionen
-    stem_selection_strategy: str = Field("semantic", regex="^(semantic|random|quality)$")
-    arrangement_complexity: ComplexityLevel = Field(ComplexityLevel.MEDIUM)
-    allow_pitch_shifting: bool = Field(True)
-    allow_time_stretching: bool = Field(True)
-    
-    # Tags
-    tags: Optional[List[str]] = Field(default_factory=list)
-
-
-class PreprocessRequest(BaseSchema):
-    """Schema für Preprocessing-Anfragen"""
-    file_paths: List[str] = Field(..., min_items=1, max_items=100)
-    force_reprocess: bool = Field(False)
-    extract_features: bool = Field(True)
-    generate_tags: bool = Field(True)
-    analyze_quality: bool = Field(True)
-
-
-# Response Schemas
-class HealthResponse(BaseSchema):
-    """Schema für Health-Check-Antworten"""
-    status: str = Field(..., regex="^(healthy|degraded|unhealthy)$")
-    timestamp: datetime
-    version: str
-    uptime_seconds: float
-    database_status: str
-    clap_model_status: str
-    processing_queue_size: int
-    system_metrics: Dict[str, Any]
-
-
-class StatisticsResponse(BaseSchema):
-    """Schema für Statistik-Antworten"""
-    total_stems: int
-    processed_stems: int
-    total_tracks: int
-    completed_tracks: int
-    processing_rate: float
-    average_quality: float
-    system_performance: Dict[str, Any]
-    recent_activity: Dict[str, Any]
-
-
-class SearchResponse(BaseSchema):
-    """Schema für Such-Antworten"""
-    results: List[StemResponse]
-    total_count: int
-    query_time_ms: float
-    search_metadata: Dict[str, Any]
-
-
-class ErrorResponse(BaseSchema):
-    """Schema für Fehler-Antworten"""
-    error: str
-    detail: Optional[str] = None
-    error_code: Optional[str] = None
-    timestamp: datetime
-    request_id: Optional[str] = None
-
-
-class SuccessResponse(BaseSchema):
-    """Schema für Erfolgs-Antworten"""
+class WebSocketResponse(BaseModel):
+    status: str
     message: str
-    data: Optional[Dict[str, Any]] = None
-    timestamp: datetime
+    data: Optional[Any] = None
 
+class ConnectionMessage(BaseModel):
+    client_id: str
+    message: str
 
-# Arrangement Schemas
-class ArrangementSection(BaseSchema):
-    """Schema für Arrangement-Sektionen"""
-    name: str = Field(..., min_length=1, max_length=100)
-    start_time: float = Field(..., ge=0)
-    duration: float = Field(..., gt=0)
-    energy_level: EnergyLevel
-    stem_layers: Dict[str, Dict[str, Any]]  # layer_name -> layer_config
-    effects: Optional[Dict[str, Any]] = None
-    transitions: Optional[Dict[str, Any]] = None
+class DisconnectionMessage(BaseModel):
+    client_id: str
+    message: str
 
+class ErrorMessage(BaseModel):
+    code: int
+    message: str
 
-class ArrangementPlan(BaseSchema):
-    """Schema für vollständige Arrangement-Pläne"""
-    track_id: Optional[int] = None
-    total_duration: float = Field(..., gt=0)
-    target_bpm: float = Field(..., ge=20, le=300)
-    target_key: str = Field(..., max_length=10)
-    genre: str = Field(..., max_length=100)
-    mood: str = Field(..., max_length=100)
-    energy_progression: List[EnergyLevel]
-    sections: List[ArrangementSection]
-    global_effects: Optional[Dict[str, Any]] = None
-    mastering_settings: Optional[Dict[str, Any]] = None
-    metadata: Optional[Dict[str, Any]] = None
+class RenderProgressMessage(BaseModel):
+    job_id: str
+    progress: float
+    current_step: str
+    message: Optional[str] = None
 
+class AnalysisProgressMessage(BaseModel):
+    job_id: str
+    progress: float
+    current_step: str
+    message: Optional[str] = None
 
-# Configuration Schemas
-class ConfigurationSetting(BaseSchema):
-    """Schema für Konfigurationseinstellungen"""
-    category: str = Field(..., min_length=1, max_length=100)
-    key: str = Field(..., min_length=1, max_length=200)
-    value: Any
-    data_type: str = Field(..., regex="^(string|integer|float|boolean|json)$")
-    description: Optional[str] = Field(None, max_length=1000)
-    is_user_configurable: bool = Field(True)
-    requires_restart: bool = Field(False)
-    validation_rules: Optional[Dict[str, Any]] = None
-    default_value: Optional[Any] = None
+class SystemStatusMessage(BaseModel):
+    cpu_usage: float
+    memory_usage: float
+    disk_usage: float
+    active_jobs: int
+    queue_size: int
 
+class NotificationMessage(BaseModel):
+    type: str
+    title: str
+    message: str
+    timestamp: Optional[str] = None
 
-# Batch Operation Schemas
-class BatchProcessRequest(BaseSchema):
-    """Schema für Batch-Verarbeitungsanfragen"""
-    operation: str = Field(..., regex="^(preprocess|analyze|cleanup|reindex)$")
-    filters: Optional[Dict[str, Any]] = None
-    parameters: Optional[Dict[str, Any]] = None
-    priority: int = Field(5, ge=1, le=10)
+class BroadcastMessage(BaseModel):
+    event: str
+    data: Any
 
+class PrivateMessage(BaseModel):
+    recipient_id: str
+    message: str
 
-class BatchProcessResponse(BaseSchema):
-    """Schema für Batch-Verarbeitungsantworten"""
-    job_id: int
-    operation: str
-    estimated_items: int
-    estimated_duration_seconds: Optional[float] = None
-    created_at: datetime
+class SubscriptionMessage(BaseModel):
+    client_id: str
+    topic: str
 
+class UnsubscriptionMessage(BaseModel):
+    client_id: str
+    topic: str
 
-# Validation Schemas
-class ValidationResult(BaseSchema):
-    """Schema für Validierungsergebnisse"""
-    is_valid: bool
-    errors: List[str] = Field(default_factory=list)
-    warnings: List[str] = Field(default_factory=list)
-    metadata: Optional[Dict[str, Any]] = None
-
-
-# Export Schema
-class ExportRequest(BaseSchema):
-    """Schema für Export-Anfragen"""
-    format: str = Field(..., regex="^(json|csv|xml)$")
-    include_stems: bool = Field(True)
-    include_tracks: bool = Field(True)
-    include_metadata: bool = Field(True)
-    date_range: Optional[Dict[str, datetime]] = None
-    filters: Optional[Dict[str, Any]] = None
-
-
-# Pagination Schema
-class PaginationParams(BaseSchema):
-    """Schema für Paginierung"""
-    page: int = Field(1, ge=1)
-    size: int = Field(50, ge=1, le=200)
-    
-    @property
-    def offset(self) -> int:
-        return (self.page - 1) * self.size
-    
-    @property
-    def limit(self) -> int:
-        return self.size
-
-
-class PaginatedResponse(BaseSchema):
-    """Schema für paginierte Antworten"""
-    items: List[Any]
-    total: int
-    page: int
-    size: int
-    pages: int
-    
-    @validator('pages', pre=True, always=True)
-    def calculate_pages(cls, v, values):
-        if 'total' in values and 'size' in values:
-            return max(1, (values['total'] + values['size'] - 1) // values['size'])
-        return v
+class HeartbeatMessage(BaseModel):
+    client_id: str
+    timestamp: str

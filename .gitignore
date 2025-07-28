@@ -273,3 +273,12 @@ secrets.json
 # Memory dumps
 *.dump
 *.dmp
+gemini.md
+log.txt
+MUSICAL_INTELLIGENCE_IMPLEMENTATION.md
+System_FULL_Audit-Bericht_-_Neuromorphe_Traum-Engine.md
+System-Audit-Bericht_Neuromorphe_Traum-Engine_2025.md
+.trae/rules/project_rules.md
+processed_database/stems.db
+*.db   
+*.bat  

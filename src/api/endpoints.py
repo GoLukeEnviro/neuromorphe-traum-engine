@@ -500,7 +500,7 @@ async def play_track(
         job = crud.create_processing_job(db, job_data)
         
         # Background-Task starten
-        background_tasks.add_task(run_playback_job, job.id, live_player)
+        background_tasks.add_task(run_generation_job, job.id)
         
         return SuccessResponse(
             message="Playback initiated",
@@ -581,6 +581,7 @@ async def run_preprocessing_job(job_id: int):
     try:
         job = crud.get_processing_job(db, job_id)
         if not job:
+            logger.error(f"Job {job_id} not found")
             return
         
         # Job als "processing" markieren
@@ -592,6 +593,7 @@ async def run_preprocessing_job(job_id: int):
         
         file_paths = job.input_data["file_paths"]
         total_files = len(file_paths)
+        processed_count = 0
         
         for i, file_path in enumerate(file_paths):
             # Progress aktualisieren
@@ -601,9 +603,14 @@ async def run_preprocessing_job(job_id: int):
                 "current_step": f"Processing file {i+1}/{total_files}: {os.path.basename(file_path)}"
             })
             
-            # Datei verarbeiten
+            # Datei verarbeiten mit der korrekten Methode
             try:
-                await preprocessor.process_file(file_path, db)
+                result = await preprocessor.process_audio_file(file_path)
+                if result.get('success', False):
+                    processed_count += 1
+                    logger.info(f"Successfully processed: {file_path}")
+                else:
+                    logger.warning(f"Failed to process: {file_path} - {result.get('error', 'Unknown error')}")
             except Exception as e:
                 logger.error(f"Failed to process file {file_path}: {e}")
                 continue
@@ -614,8 +621,14 @@ async def run_preprocessing_job(job_id: int):
             "progress_percentage": 100.0,
             "current_step": "Preprocessing completed",
             "completed_at": datetime.utcnow(),
-            "output_data": {"processed_files": total_files}
+            "output_data": {
+                "total_files": total_files,
+                "processed_files": processed_count,
+                "failed_files": total_files - processed_count
+            }
         })
+        
+        logger.info(f"Preprocessing job {job_id} completed: {processed_count}/{total_files} files processed")
         
     except Exception as e:
         logger.error(f"Preprocessing job {job_id} failed: {e}")
@@ -628,7 +641,7 @@ async def run_preprocessing_job(job_id: int):
         db.close()
 
 
-async def run_playback_job(job_id: int, live_player: LivePlayerService):
+async def run_generation_job(job_id: int):
     """Generation-Job im Hintergrund ausführen"""
     db = next(get_db())
     arranger = get_arranger_service()
@@ -637,9 +650,8 @@ async def run_playback_job(job_id: int, live_player: LivePlayerService):
     try:
         job = crud.get_processing_job(db, job_id)
         if not job:
+            logger.error(f"Job {job_id} not found")
             return
-        
-        
         
         # Job als "processing" markieren
         crud.update_processing_job(db, job_id, {
@@ -647,16 +659,25 @@ async def run_playback_job(job_id: int, live_player: LivePlayerService):
             "started_at": datetime.utcnow(),
             "current_step": "Analyzing prompt"
         })
+        
+        # Schritt 1: Arrangement-Plan erstellen
         crud.update_processing_job(db, job_id, {
             "progress_percentage": 20.0,
             "current_step": "Creating arrangement plan"
         })
         
+        generation_request = job.input_data["generation_request"]
+        prompt = generation_request["prompt"]
+        
+        # ArrangerService aufrufen
         arrangement_plan = await arranger.create_arrangement(
-            job.input_data["generation_request"]["prompt"],
+            prompt,
             db,
-            **{k: v for k, v in job.input_data["generation_request"].items() if k != "prompt"}
+            **{k: v for k, v in generation_request.items() if k != "prompt"}
         )
+        
+        if not arrangement_plan:
+            raise Exception("Failed to create arrangement plan")
         
         # Schritt 2: Live-Wiedergabe starten
         crud.update_processing_job(db, job_id, {
@@ -664,21 +685,25 @@ async def run_playback_job(job_id: int, live_player: LivePlayerService):
             "current_step": "Starting live playback"
         })
         
+        # LivePlayerService aufrufen mit dem Plan
         live_player.play(arrangement_plan)
         
-        # Job als abgeschlossen markieren (für den Start der Wiedergabe)
+        # Job als abgeschlossen markieren
         crud.update_processing_job(db, job_id, {
             "job_status": "completed",
             "progress_percentage": 100.0,
             "current_step": "Live playback started",
             "completed_at": datetime.utcnow(),
             "output_data": {
-                "status": "playback_initiated"
+                "status": "playback_initiated",
+                "arrangement_plan": arrangement_plan
             }
         })
         
+        logger.info(f"Generation job {job_id} completed successfully - playback started")
+        
     except Exception as e:
-        logger.error(f"Playback job {job_id} failed: {e}")
+        logger.error(f"Generation job {job_id} failed: {e}")
         
         crud.update_processing_job(db, job_id, {
             "job_status": "failed",

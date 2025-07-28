@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Any
 from unittest.mock import MagicMock
 
-from src.schemas.arrangement import (
+from src.schemas.schemas import (
     ArrangementBase, ArrangementCreate, ArrangementUpdate, ArrangementResponse,
     ArrangementSection, ArrangementStem, ArrangementTransition,
     ArrangementStructure, ArrangementMetadata, ArrangementAnalysis,

@@ -8,7 +8,7 @@ Diese Endpunkte implementieren den vollständigen lernenden Kreislauf:
 """
 
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, UploadFile, File, Depends
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Dict, Optional, Any
 import os
 import tempfile
@@ -19,8 +19,12 @@ from ...services.separation_service import SeparationService
 from ...services.training_service import TrainingService
 from ...services.generative_service import GenerativeService
 from ...services.preprocessor import PreprocessorService
+from ...services.renderer import RendererService
 from ...core.logging import get_logger
 from ...core.config import settings
+from ...database.crud import ProcessingJobCRUD
+from ...database.database import get_db
+from sqlalchemy.orm import Session
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -38,6 +42,9 @@ def get_generative_service() -> GenerativeService:
 def get_preprocessor_service() -> PreprocessorService:
     return PreprocessorService()
 
+def get_renderer_service() -> RendererService:
+    return RendererService()
+
 
 # Pydantic Models für Request/Response
 class PreprocessRequest(BaseModel):
@@ -45,13 +52,42 @@ class PreprocessRequest(BaseModel):
     stereo_track_path: Optional[str] = Field(None, description="Pfad zu einem Stereo-Track für Separation")
     stem_paths: Optional[List[str]] = Field(None, description="Liste von Stem-Pfaden für direktes Processing")
     
-    class Config:
-        schema_extra = {
-            "example": {
-                "stereo_track_path": "/path/to/track.wav",
-                "stem_paths": ["/path/to/stem1.wav", "/path/to/stem2.wav"]
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "stereo_track_path": "/path/to/track.wav",
+            "stem_paths": ["/path/to/stem1.wav", "/path/to/stem2.wav"]
         }
+    })
+
+
+class RenderRequest(BaseModel):
+    """Request für Track-Rendering"""
+    arrangement_plan: Dict[str, Any] = Field(..., description="Der Arrangement-Plan des Tracks")
+    output_format: str = Field('wav', description="Ausgabeformat (z.B. wav, mp3)")
+    quality: str = Field('high', description="Qualitätsstufe (low, medium, high)")
+
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "arrangement_plan": {
+                "bpm": 120,
+                "total_bars": 32,
+                "track_structure": {
+                    "sections": [
+                        {
+                            "name": "intro",
+                            "start_bar": 0,
+                            "stems": [
+                                {"stem_id": 1, "start_offset_bars": 0, "duration_bars": 8},
+                                {"stem_id": 2, "start_offset_bars": 0, "duration_bars": 8}
+                            ]
+                        }
+                    ]
+                }
+            },
+            "output_format": "wav",
+            "quality": "high"
+        }
+    })
 
 
 class TrainingRequest(BaseModel):
@@ -62,16 +98,15 @@ class TrainingRequest(BaseModel):
     learning_rate: float = Field(1e-3, gt=0, lt=1, description="Lernrate")
     latent_dim: int = Field(128, ge=32, le=512, description="Latente Dimensionalität")
     
-    class Config:
-        schema_extra = {
-            "example": {
-                "category": "kick",
-                "epochs": 100,
-                "batch_size": 32,
-                "learning_rate": 0.001,
-                "latent_dim": 128
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "category": "kick",
+            "epochs": 100,
+            "batch_size": 32,
+            "learning_rate": 0.001,
+            "latent_dim": 128
         }
+    })
 
 
 class GenerationRequest(BaseModel):
@@ -82,16 +117,15 @@ class GenerationRequest(BaseModel):
     interpolation_factor: float = Field(0.5, ge=0.0, le=1.0, description="Interpolationsfaktor")
     auto_process: bool = Field(True, description="Automatisches Processing der generierten Stems")
     
-    class Config:
-        schema_extra = {
-            "example": {
-                "category": "kick",
-                "num_variations": 10,
-                "generation_mode": "random",
-                "interpolation_factor": 0.5,
-                "auto_process": True
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "category": "kick",
+            "num_variations": 10,
+            "generation_mode": "random",
+            "interpolation_factor": 0.5,
+            "auto_process": True
         }
+    })
 
 
 class HybridGenerationRequest(BaseModel):
@@ -102,16 +136,15 @@ class HybridGenerationRequest(BaseModel):
     blend_ratios: Optional[List[float]] = Field(None, description="Liste von Mischungsverhältnissen")
     auto_process: bool = Field(True, description="Automatisches Processing der generierten Stems")
     
-    class Config:
-        schema_extra = {
-            "example": {
-                "category1": "kick",
-                "category2": "bass",
-                "num_variations": 5,
-                "blend_ratios": [0.2, 0.4, 0.6, 0.8],
-                "auto_process": True
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "category1": "kick",
+            "category2": "bass",
+            "num_variations": 5,
+            "blend_ratios": [0.2, 0.4, 0.6, 0.8],
+            "auto_process": True
         }
+    })
 
 
 class TrackGenerationRequest(BaseModel):
@@ -123,26 +156,27 @@ class TrackGenerationRequest(BaseModel):
     include_separated: bool = Field(True, description="Separierte Stems einbeziehen")
     include_original: bool = Field(True, description="Originale Stems einbeziehen")
     
-    class Config:
-        schema_extra = {
-            "example": {
-                "prompt": "aggressive industrial techno 140 bpm",
-                "bpm": 140,
-                "duration": 120.0,
-                "include_generated": True,
-                "include_separated": True,
-                "include_original": True
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "prompt": "aggressive industrial techno 140 bpm",
+            "bpm": 140,
+            "duration": 120.0,
+            "include_generated": True,
+            "include_separated": True,
+            "include_original": True
         }
+    })
 
 
 # Background Task Functions
-async def background_training_task(category: str, epochs: int, batch_size: int, 
+async def background_training_task(job_id: int, category: str, epochs: int, batch_size: int, 
                                  learning_rate: float, latent_dim: int,
-                                 training_service: TrainingService = Depends(get_training_service)):
+                                 training_service: TrainingService = Depends(get_training_service),
+                                 db: Session = Depends(get_db)):
     """Background Task für VAE-Training"""
     try:
-        logger.info(f"Starte Background-Training für Kategorie: {category}")
+        ProcessingJobCRUD.update_job_status(db, job_id, "running", current_step="Starte Training")
+        logger.info(f"Starte Background-Training für Kategorie: {category} (Job ID: {job_id})")
         result = await training_service.train_vae_for_category(
             category=category,
             epochs=epochs,
@@ -150,18 +184,26 @@ async def background_training_task(category: str, epochs: int, batch_size: int,
             learning_rate=learning_rate,
             latent_dim=latent_dim
         )
-        logger.info(f"Background-Training abgeschlossen für {category}: {result['success']}")
+        if result['success']:
+            ProcessingJobCRUD.update_job_status(db, job_id, "completed", output_data=result)
+            logger.info(f"Background-Training abgeschlossen für {category}: {result['success']} (Job ID: {job_id})")
+        else:
+            ProcessingJobCRUD.update_job_status(db, job_id, "failed", error_message=result.get('error', 'Unbekannter Fehler'))
+            logger.error(f"Background-Training fehlgeschlagen für {category}: {result.get('error', 'Unbekannter Fehler')} (Job ID: {job_id})")
     except Exception as e:
-        logger.error(f"Fehler im Background-Training für {category}: {e}")
+        ProcessingJobCRUD.update_job_status(db, job_id, "failed", error_message=str(e))
+        logger.error(f"Fehler im Background-Training für {category}: {e} (Job ID: {job_id})")
 
 
-async def background_generation_and_processing_task(category: str, num_variations: int, 
+async def background_generation_and_processing_task(job_id: int, category: str, num_variations: int, 
                                                   generation_mode: str, interpolation_factor: float,
                                                   generative_service: GenerativeService = Depends(get_generative_service),
-                                                  preprocessor_service: PreprocessorService = Depends(get_preprocessor_service)):
+                                                  preprocessor_service: PreprocessorService = Depends(get_preprocessor_service),
+                                                  db: Session = Depends(get_db)):
     """Background Task für Generierung und automatisches Processing"""
     try:
-        logger.info(f"Starte Background-Generierung für Kategorie: {category}")
+        ProcessingJobCRUD.update_job_status(db, job_id, "running", current_step="Starte Generierung")
+        logger.info(f"Starte Background-Generierung für Kategorie: {category} (Job ID: {job_id})")
         
         # Stems generieren
         generation_result = await generative_service.mutate_stems(
@@ -172,6 +214,7 @@ async def background_generation_and_processing_task(category: str, num_variation
         )
         
         if generation_result['success']:
+            ProcessingJobCRUD.update_job_status(db, job_id, "running", current_step="Verarbeite generierte Stems")
             # Generierte Stems automatisch verarbeiten
             generated_stems = generation_result['generated_stems']
             for stem_info in generated_stems:
@@ -183,17 +226,22 @@ async def background_generation_and_processing_task(category: str, num_variation
                     logger.info(f"Generierter Stem verarbeitet: {stem_info['filename']}")
                 except Exception as e:
                     logger.warning(f"Fehler beim Verarbeiten von {stem_info['filename']}: {e}")
-        
-        logger.info(f"Background-Generierung abgeschlossen für {category}")
+            ProcessingJobCRUD.update_job_status(db, job_id, "completed", output_data=generation_result)
+            logger.info(f"Background-Generierung abgeschlossen für {category} (Job ID: {job_id})")
+        else:
+            ProcessingJobCRUD.update_job_status(db, job_id, "failed", error_message=generation_result.get('error', 'Unbekannter Fehler'))
+            logger.error(f"Background-Generierung fehlgeschlagen für {category}: {generation_result.get('error', 'Unbekannter Fehler')} (Job ID: {job_id})")
     except Exception as e:
-        logger.error(f"Fehler in Background-Generierung für {category}: {e}")
+        ProcessingJobCRUD.update_job_status(db, job_id, "failed", error_message=str(e))
+        logger.error(f"Fehler in Background-Generierung für {category}: {e} (Job ID: {job_id})")
 
 
 # API Endpoints
 @router.post("/preprocess")
 async def preprocess_audio(request: PreprocessRequest, background_tasks: BackgroundTasks,
                            separation_service: SeparationService = Depends(get_separation_service),
-                           preprocessor_service: PreprocessorService = Depends(get_preprocessor_service)):
+                           preprocessor_service: PreprocessorService = Depends(get_preprocessor_service),
+                           db: Session = Depends(get_db)):
     """
     Preprocessing-Endpunkt für Stem-Separation und -Analyse
     
@@ -202,22 +250,60 @@ async def preprocess_audio(request: PreprocessRequest, background_tasks: Backgro
     2. Direkt eine Liste von Stem-Pfaden analysieren
     """
     try:
+        # Job in Datenbank erstellen
+        job_data = {
+            "job_type": "preprocessing",
+            "job_status": "pending",
+            "input_data": request.dict()
+        }
+        job = ProcessingJobCRUD.create_job(db, job_data)
+
+        background_tasks.add_task(
+            background_preprocessing_task,
+            job.id,
+            request.stereo_track_path,
+            request.stem_paths,
+            separation_service,
+            preprocessor_service,
+            db
+        )
+        
+        return {
+            'success': True,
+            'message': f'Preprocessing-Job gestartet (Job ID: {job.id})',
+            'job_id': job.id
+        }
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Starten des Preprocessing-Jobs: {e}")
+        raise HTTPException(status_code=500, detail=f"Preprocessing-Job Start fehlgeschlagen: {str(e)}")
+
+
+async def background_preprocessing_task(job_id: int, stereo_track_path: Optional[str], stem_paths: Optional[List[str]],
+                                        separation_service: SeparationService,
+                                        preprocessor_service: PreprocessorService,
+                                        db: Session):
+    """Background Task für Preprocessing"""
+    try:
+        ProcessingJobCRUD.update_job_status(db, job_id, "running", current_step="Starte Preprocessing")
+        logger.info(f"Starte Background-Preprocessing (Job ID: {job_id})")
+        
         results = []
         
         # Fall 1: Stereo-Track Separation
-        if request.stereo_track_path:
-            if not os.path.exists(request.stereo_track_path):
-                raise HTTPException(status_code=404, detail=f"Stereo-Track nicht gefunden: {request.stereo_track_path}")
+        if stereo_track_path:
+            if not os.path.exists(stereo_track_path):
+                raise HTTPException(status_code=404, detail=f"Stereo-Track nicht gefunden: {stereo_track_path}")
             
-            logger.info(f"Starte Separation für: {request.stereo_track_path}")
+            ProcessingJobCRUD.update_job_status(db, job_id, "running", current_step="Separiere Track")
+            logger.info(f"Starte Separation für: {stereo_track_path}")
             
-            # Track separieren
-            separation_result = await separation_service.separate_track_async(request.stereo_track_path)
+            separation_result = await separation_service.separate_track(stereo_track_path)
             
             if not separation_result['success']:
                 raise HTTPException(status_code=500, detail=f"Separation fehlgeschlagen: {separation_result['error']}")
             
-            # Separierte Stems verarbeiten
+            ProcessingJobCRUD.update_job_status(db, job_id, "running", current_step="Verarbeite separierte Stems")
             for stem_path in separation_result['stem_paths']:
                 try:
                     process_result = await preprocessor_service.process_audio_file(
@@ -236,8 +322,9 @@ async def preprocess_audio(request: PreprocessRequest, background_tasks: Backgro
                     })
         
         # Fall 2: Direkte Stem-Verarbeitung
-        if request.stem_paths:
-            for stem_path in request.stem_paths:
+        if stem_paths:
+            ProcessingJobCRUD.update_job_status(db, job_id, "running", current_step="Verarbeite direkte Stems")
+            for stem_path in stem_paths:
                 if not os.path.exists(stem_path):
                     logger.warning(f"Stem-Pfad nicht gefunden: {stem_path}")
                     continue
@@ -261,17 +348,12 @@ async def preprocess_audio(request: PreprocessRequest, background_tasks: Backgro
         if not results:
             raise HTTPException(status_code=400, detail="Keine gültigen Audio-Pfade zum Verarbeiten gefunden")
         
-        return {
-            'success': True,
-            'message': f'{len(results)} Audio-Dateien verarbeitet',
-            'results': results
-        }
+        ProcessingJobCRUD.update_job_status(db, job_id, "completed", output_data={'results': results})
+        logger.info(f"Background-Preprocessing abgeschlossen (Job ID: {job_id})")
         
-    except HTTPException:
-        raise
     except Exception as e:
-        logger.error(f"Fehler beim Preprocessing: {e}")
-        raise HTTPException(status_code=500, detail=f"Preprocessing fehlgeschlagen: {str(e)}")
+        ProcessingJobCRUD.update_job_status(db, job_id, "failed", error_message=str(e))
+        logger.error(f"Fehler im Background-Preprocessing (Job ID: {job_id}): {e}")
 
 
 @router.post("/preprocess/upload")
@@ -307,30 +389,46 @@ async def preprocess_uploaded_audio(background_tasks: BackgroundTasks, file: Upl
 
 @router.post("/train")
 async def train_vae_model(request: TrainingRequest, background_tasks: BackgroundTasks,
-                          training_service: TrainingService = Depends(get_training_service)):
+                          training_service: TrainingService = Depends(get_training_service),
+                          db: Session = Depends(get_db)):
     """
     Training-Endpunkt für VAE-Modelle
     
     Startet asynchrones Training eines VAE-Modells für eine bestimmte Kategorie.
     """
     try:
-        # Prüfen ob genügend Daten vorhanden sind
-        # (Diese Prüfung wird im TrainingService durchgeführt)
+        # Job in Datenbank erstellen
+        job_data = {
+            "job_type": "training",
+            "job_status": "pending",
+            "input_data": request.dict(),
+            "parameters": {
+                "category": request.category,
+                "epochs": request.epochs,
+                "batch_size": request.batch_size,
+                "learning_rate": request.learning_rate,
+                "latent_dim": request.latent_dim
+            }
+        }
+        job = ProcessingJobCRUD.create_job(db, job_data)
         
         # Training im Hintergrund starten
         background_tasks.add_task(
             background_training_task,
+            job.id, # Job ID übergeben
             request.category,
             request.epochs,
             request.batch_size,
             request.learning_rate,
             request.latent_dim,
-            training_service # Übergabe des Service an die Background-Task
+            training_service, # Übergabe des Service an die Background-Task
+            db # Übergabe der DB-Session an die Background-Task
         )
         
         return {
             'success': True,
-            'message': f'VAE-Training für Kategorie "{request.category}" gestartet',
+            'message': f'VAE-Training für Kategorie "{request.category}" gestartet (Job ID: {job.id})',
+            'job_id': job.id,
             'category': request.category,
             'training_parameters': {
                 'epochs': request.epochs,
@@ -372,7 +470,8 @@ async def train_all_categories(background_tasks: BackgroundTasks, min_samples: i
 @router.post("/generate")
 async def generate_stems(request: GenerationRequest, background_tasks: BackgroundTasks,
                          generative_service: GenerativeService = Depends(get_generative_service),
-                         preprocessor_service: PreprocessorService = Depends(get_preprocessor_service)):
+                         preprocessor_service: PreprocessorService = Depends(get_preprocessor_service),
+                         db: Session = Depends(get_db)):
     """
     Generierungs-Endpunkt für neue Stems
     
@@ -380,20 +479,31 @@ async def generate_stems(request: GenerationRequest, background_tasks: Backgroun
     """
     try:
         if request.auto_process:
+            # Job in Datenbank erstellen
+            job_data = {
+                "job_type": "generation",
+                "job_status": "pending",
+                "input_data": request.dict()
+            }
+            job = ProcessingJobCRUD.create_job(db, job_data)
+
             # Generierung und Processing im Hintergrund
             background_tasks.add_task(
                 background_generation_and_processing_task,
+                job.id,
                 request.category,
                 request.num_variations,
                 request.generation_mode,
                 request.interpolation_factor,
                 generative_service, # Übergabe des Service an die Background-Task
-                preprocessor_service # Übergabe des Service an die Background-Task
+                preprocessor_service, # Übergabe des Service an die Background-Task
+                db
             )
             
             return {
                 'success': True,
-                'message': f'{request.num_variations} Stems für "{request.category}" werden generiert und verarbeitet',
+                'message': f'{request.num_variations} Stems für "{request.category}" werden generiert und verarbeitet (Job ID: {job.id})',
+                'job_id': job.id,
                 'category': request.category,
                 'num_variations': request.num_variations,
                 'generation_mode': request.generation_mode,
@@ -466,6 +576,72 @@ async def batch_generate_all_categories(background_tasks: BackgroundTasks,
     except Exception as e:
         logger.error(f"Fehler bei Batch-Generierung: {e}")
         raise HTTPException(status_code=500, detail=f"Batch-Generierung fehlgeschlagen: {str(e)}")
+
+
+@router.post("/render")
+async def render_track(request: RenderRequest, background_tasks: BackgroundTasks,
+                       renderer_service: RendererService = Depends(get_renderer_service),
+                       db: Session = Depends(get_db)):
+    """
+    Rendering-Endpunkt für Tracks
+    
+    Startet asynchrones Rendering eines Tracks basierend auf einem Arrangement-Plan.
+    """
+    try:
+        # Job in Datenbank erstellen
+        job_data = {
+            "job_type": "rendering",
+            "job_status": "pending",
+            "input_data": request.dict()
+        }
+        job = ProcessingJobCRUD.create_job(db, job_data)
+
+        background_tasks.add_task(
+            background_rendering_task,
+            job.id,
+            request.arrangement_plan,
+            request.output_format,
+            request.quality,
+            renderer_service,
+            db
+        )
+        
+        return {
+            'success': True,
+            'message': f'Track-Rendering-Job gestartet (Job ID: {job.id})',
+            'job_id': job.id
+        }
+        
+    except Exception as e:
+        logger.error(f"Fehler beim Starten des Rendering-Jobs: {e}")
+        raise HTTPException(status_code=500, detail=f"Rendering-Job Start fehlgeschlagen: {str(e)}")
+
+
+async def background_rendering_task(job_id: int, arrangement_plan: Dict[str, Any],
+                                    output_format: str, quality: str,
+                                    renderer_service: RendererService,
+                                    db: Session):
+    """Background Task für Track-Rendering"""
+    try:
+        ProcessingJobCRUD.update_job_status(db, job_id, "running", current_step="Starte Rendering")
+        logger.info(f"Starte Background-Rendering (Job ID: {job_id})")
+        
+        render_result = await renderer_service.render_track(
+            arrangement=arrangement_plan,
+            output_format=output_format,
+            quality=quality
+        )
+        
+        if render_result['success']:
+            ProcessingJobCRUD.update_job_status(db, job_id, "completed", output_data=render_result)
+            logger.info(f"Background-Rendering abgeschlossen (Job ID: {job_id}): {render_result['output_path']}")
+        else:
+            ProcessingJobCRUD.update_job_status(db, job_id, "failed", error_message=render_result.get('error', 'Unbekannter Fehler'))
+            logger.error(f"Background-Rendering fehlgeschlagen (Job ID: {job_id}): {render_result.get('error', 'Unbekannter Fehler')}")
+            
+    except Exception as e:
+        ProcessingJobCRUD.update_job_status(db, job_id, "failed", error_message=str(e))
+        logger.error(f"Fehler im Background-Rendering (Job ID: {job_id}): {e}")
 
 
 # Status und Info Endpoints

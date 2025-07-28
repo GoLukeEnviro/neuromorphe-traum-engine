@@ -6,11 +6,24 @@ Diese Datei definiert alle SQLAlchemy-Modelle für die Datenbank.
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from sqlalchemy import Column, Integer, String, Float, DateTime, Text, Boolean, JSON, ForeignKey, Index
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import DeclarativeBase, relationship
 from sqlalchemy.dialects.sqlite import JSON as SQLiteJSON
+from enum import Enum
 
-Base = declarative_base()
+class Base(DeclarativeBase):
+    pass
+
+class RenderStatus(str, Enum):
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+class RenderFormat(str, Enum):
+    WAV = "wav"
+    MP3 = "mp3"
+    FLAC = "flac"
+    OGG = "ogg"
 
 
 class Stem(Base):
@@ -39,7 +52,7 @@ class Stem(Base):
     time_signature = Column(String(10), nullable=True)
     
     # Kategorisierung
-    instrument = Column(String(100), nullable=True, index=True)
+    category = Column(String(100), nullable=True, index=True)
     genre = Column(String(100), nullable=True, index=True)
     mood = Column(String(100), nullable=True, index=True)
     energy_level = Column(String(50), nullable=True, index=True)
@@ -55,6 +68,10 @@ class Stem(Base):
     pattern_analysis = Column(SQLiteJSON, nullable=True)  # Pattern-Analyse-Ergebnisse
     neural_features = Column(SQLiteJSON, nullable=True)  # Neurale Features
     perceptual_mapping = Column(SQLiteJSON, nullable=True)  # Perzeptuelle Zuordnung
+    
+    # Musikalische Analyse
+    harmonic_complexity = Column(Float, nullable=True, index=True)  # Harmonische Komplexität (0.0 - 1.0)
+    rhythmic_complexity = Column(Float, nullable=True, index=True)  # Rhythmische Komplexität (0.0 - 1.0)
     
     # Qualitätsbewertung
     quality_score = Column(Float, nullable=True, index=True)
@@ -75,14 +92,14 @@ class Stem(Base):
     
     # Indizes für bessere Performance
     __table_args__ = (
-        Index('idx_stem_search', 'instrument', 'genre', 'mood', 'energy_level'),
+        Index('idx_stem_search', 'category', 'genre', 'mood', 'energy_level'),
         Index('idx_stem_music', 'key', 'bpm', 'time_signature'),
         Index('idx_stem_quality', 'quality_score', 'complexity_level'),
         Index('idx_stem_processing', 'processing_status', 'created_at'),
     )
     
     def __repr__(self):
-        return f"<Stem(id={self.id}, filename='{self.filename}', instrument='{self.instrument}')>"
+        return f"<Stem(id={self.id}, filename='{self.filename}', category='{self.category}')>"
 
 
 class GeneratedTrack(Base):

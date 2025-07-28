@@ -2,7 +2,9 @@ import sounddevice as sd
 import numpy as np
 import threading
 import time
+import librosa
 from typing import Dict, Any, List
+from ..database.service import DatabaseService
 
 class LivePlayerService:
     """
@@ -17,6 +19,43 @@ class LivePlayerService:
         self.stream = None
         self.conductor_thread = None
         self.is_playing = False
+        self.db_service = DatabaseService()
+
+    async def _load_stem_audio(self, stem_id: str) -> np.ndarray:
+        """
+        Lädt die Audio-Daten für einen Stem aus der Datenbank und von der Festplatte.
+        """
+        try:
+            # Stem aus der Datenbank holen
+            stem = await self.db_service.get_stem_by_id(int(stem_id))
+            if not stem:
+                print(f"Stem with ID {stem_id} not found in database")
+                return None
+            
+            # Pfad zur verarbeiteten Audio-Datei
+            audio_path = stem.processed_path
+            if not audio_path:
+                print(f"No processed_path found for stem {stem_id}")
+                return None
+            
+            # Audio-Datei mit librosa laden
+            print(f"Loading audio file: {audio_path}")
+            audio_data, sr = librosa.load(audio_path, sr=self.sample_rate, mono=False)
+            
+            # Sicherstellen, dass wir Stereo-Audio haben
+            if audio_data.ndim == 1:
+                # Mono zu Stereo konvertieren
+                audio_data = np.stack([audio_data, audio_data], axis=0)
+            
+            # Transponieren für die richtige Form (frames, channels)
+            audio_data = audio_data.T.astype(np.float32)
+            
+            print(f"Successfully loaded audio for stem {stem_id}: {audio_data.shape} samples")
+            return audio_data
+            
+        except Exception as e:
+            print(f"Error loading audio for stem {stem_id}: {e}")
+            return None
 
     def _audio_callback(self, outdata: np.ndarray, frames: int, time, status):
         """
@@ -98,16 +137,16 @@ class LivePlayerService:
                     # Aktiviere oder lade neue Stems für diese Sektion
                     for stem_id in section_stems:
                         if stem_id not in self.player_slots:
-                            # Hier müsste die Logik zum Laden der tatsächlichen Audio-Daten implementiert werden
-                            # Für jetzt: Platzhalter-Audio
-                            print(f"Loading placeholder audio for stem: {stem_id}")
-                            placeholder_audio = np.random.uniform(-0.1, 0.1, size=(self.sample_rate * 10, 2)).astype(np.float32) # 10 Sekunden Rauschen
-                            self.player_slots[stem_id] = {
-                                'audio_data': placeholder_audio,
-                                'current_frame': 0,
-                                'is_active': True,
-                                'volume': 0.5 # Standard-Lautstärke
-                            }
+                            # Echte Audio-Daten laden
+                            audio_data = self._load_stem_audio(stem_id)
+                            if audio_data is not None:
+                                print(f"Loaded real audio for stem: {stem_id}")
+                                self.player_slots[stem_id] = {
+                                    'audio_data': audio_data,
+                                    'current_frame': 0,
+                                    'is_active': True,
+                                    'volume': 0.5 # Standard-Lautstärke
+                                }
                         else:
                             self.player_slots[stem_id]['is_active'] = True
                         print(f"Activated stem: {stem_id}")

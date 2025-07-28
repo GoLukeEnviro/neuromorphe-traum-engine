@@ -6,10 +6,11 @@ from typing import List, Dict, Any, Optional
 from unittest.mock import MagicMock
 from enum import Enum
 
-from src.schemas.render import (
+from src.schemas.schemas import (
+    RenderOutput, RenderFormat, RenderQuality, RenderStatus,
+    RenderRequest, RenderProgress,
     RenderJobBase, RenderJobCreate, RenderJobUpdate, RenderJobResponse,
-    RenderStatus, RenderPriority, RenderFormat, RenderQuality,
-    RenderProgress, RenderSettings, RenderOutput, RenderError,
+    RenderPriority, RenderSettings, RenderError,
     RenderMetrics, RenderBatch, RenderTemplate, RenderQueue
 )
 from src.core.exceptions import ValidationError

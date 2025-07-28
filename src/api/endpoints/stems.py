@@ -5,12 +5,12 @@ basierend auf Audio-Stems.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
-from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field
-from ...db.database import get_db
-from ...db import crud
-from ...schemas.stem import Stem, StemList, SearchResult
+from pydantic import BaseModel, Field, ConfigDict
+from ...database.database import get_database_manager
+from ...database.service import DatabaseService
+from ...database.models import Stem
+from ...schemas.schemas import StemList, SearchResult, StemResponse
 from ...services.search import SearchService
 from ...services.arranger import ArrangerService
 from ...services.renderer import RendererService
@@ -29,6 +29,9 @@ def get_arranger_service() -> ArrangerService:
 def get_renderer_service() -> RendererService:
     return RendererService(settings=settings) # Annahme: RendererService benötigt Settings
 
+def get_database_service() -> DatabaseService:
+    return DatabaseService()
+
 
 class TrackGenerationRequest(BaseModel):
     """Request für Track-Generierung"""
@@ -39,62 +42,59 @@ class TrackGenerationRequest(BaseModel):
     include_separated: bool = Field(True, description="Separierte Stems einbeziehen")
     include_original: bool = Field(True, description="Originale Stems einbeziehen")
     
-    class Config:
-        schema_extra = {
-            "example": {
-                "prompt": "aggressive industrial techno 140 bpm",
-                "bpm": 140,
-                "duration": 120.0,
-                "include_generated": True,
-                "include_separated": True,
-                "include_original": True
-            }
+    model_config = ConfigDict(json_schema_extra={
+        "example": {
+            "prompt": "aggressive industrial techno 140 bpm",
+            "bpm": 140,
+            "duration": 120.0,
+            "include_generated": True,
+            "include_separated": True,
+            "include_original": True
         }
+    })
 
 router = APIRouter()
 
-@router.get("/", response_model=List[Stem])
-def get_stems(
+@router.get("/", response_model=List[StemResponse])
+async def get_stems(
     skip: int = Query(0, ge=0, description="Number of items to skip"),
     limit: int = Query(100, ge=1, le=1000, description="Number of items to return"),
-    db: Session = Depends(get_db)
+    db_service: DatabaseService = Depends(get_database_service)
 ):
     """Get all stems with pagination"""
-    stems = crud.get_stems(db, skip=skip, limit=limit)
+    stems = await db_service.get_all_stems(skip=skip, limit=limit)
     return stems
 
-@router.get("/{stem_id}", response_model=Stem)
-def get_stem(
+@router.get("/{stem_id}", response_model=StemResponse)
+async def get_stem(
     stem_id: int,
-    db: Session = Depends(get_db)
+    db_service: DatabaseService = Depends(get_database_service)
 ):
     """Get a specific stem by ID"""
-    stem = crud.get_stem_by_id(db, stem_id=stem_id)
+    stem = await db_service.get_stem_by_id(stem_id=stem_id)
     if stem is None:
         raise HTTPException(status_code=404, detail="Stem not found")
     return stem
 
-@router.get("/category/{category}", response_model=List[Stem])
-def get_stems_by_category(
+@router.get("/category/{category}", response_model=List[StemResponse])
+async def get_stems_by_category(
     category: str,
-    db: Session = Depends(get_db)
+    db_service: DatabaseService = Depends(get_database_service)
 ):
     """Get all stems of a specific category"""
-    stems = crud.get_stems_by_category(db, category=category)
+    stems = await db_service.get_stems_by_category(category=category)
     return stems
 
 @router.get("/search/", response_model=List[SearchResult])
-def search_stems(
+async def search_stems(
     prompt: str = Query(..., description="Search query text"),
     top_k: int = Query(5, ge=1, le=50, description="Number of results to return"),
     category: Optional[str] = Query(None, description="Filter by category"),
-    db: Session = Depends(get_db),
     search_service: SearchService = Depends(get_search_service)
 ):
     """Search stems using semantic similarity"""
     try:
-        results = search_service.search(
-            db=db,
+        results = await search_service.search(
             query=prompt,
             top_k=top_k,
             category_filter=category
@@ -108,7 +108,6 @@ def search_stems(
 async def generate_track(
     request: TrackGenerationRequest,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
     search_service: SearchService = Depends(get_search_service),
     arranger_service: ArrangerService = Depends(get_arranger_service),
     renderer_service: RendererService = Depends(get_renderer_service)
@@ -136,8 +135,7 @@ async def generate_track(
             raise HTTPException(status_code=400, detail="Mindestens eine Stem-Quelle muss aktiviert sein")
         
         # Stems basierend auf Prompt und erlaubten Quellen suchen
-        search_results = search_service.search(
-            db=db,
+        search_results = await search_service.search(
             query=request.prompt,
             top_k=50,  # Mehr Stems für bessere Auswahl
             category_filter=None
@@ -146,7 +144,7 @@ async def generate_track(
         # Stems nach erlaubten Quellen filtern
         filtered_stems = []
         for result in search_results:
-            stem = crud.get_stem_by_id(db, result.stem_id)
+            stem = result.stem # result.stem is already the Stem object
             if stem and hasattr(stem, 'source') and stem.source in allowed_sources:
                 filtered_stems.append(stem)
         

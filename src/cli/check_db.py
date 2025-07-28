@@ -3,30 +3,31 @@
 Überprüft die Datenbankstruktur der stems.db
 """
 
-import sqlite3
-import os
+import asyncio
+from pathlib import Path
 
-def check_database():
-    db_path = "processed_database/stems.db"
+from ...database.service import DatabaseService
+from ...core.config import settings
+
+async def check_database():
+    db_service = DatabaseService()
+    db_path = Path(settings.DATABASE_URL.replace("sqlite:///", ""))
     
-    if not os.path.exists(db_path):
+    if not db_path.exists():
         print(f"❌ Datenbank nicht gefunden: {db_path}")
         return
     
     print(f"✅ Datenbank gefunden: {db_path}")
     
     try:
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
         
         # Tabellen auflisten
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-        tables = cursor.fetchall()
-        print(f"\nTabellen: {[table[0] for table in tables]}")
+        tables_raw = await db_service.execute_raw_sql("SELECT name FROM sqlite_master WHERE type='table';")
+        tables = [table[0] for table in tables_raw]
+        print(f"\nTabellen: {tables}")
         
         # Schema der stems-Tabelle anzeigen
-        cursor.execute("PRAGMA table_info(stems)")
-        columns = cursor.fetchall()
+        columns = await db_service.execute_raw_sql("PRAGMA table_info(stems)")
         
         print("\n=== stems Tabellen-Schema ===")
         for col in columns:
@@ -35,15 +36,13 @@ def check_database():
             print(f"  {name}: {type_}{pk_str}")
         
         # Anzahl der Einträge
-        cursor.execute("SELECT COUNT(*) FROM stems")
-        count = cursor.fetchone()[0]
+        count = await db_service.get_stem_count()
         print(f"\nAnzahl Einträge: {count}")
         
-        conn.close()
         print("\n✅ Datenbankstruktur ist korrekt!")
         
     except Exception as e:
         print(f"❌ Fehler beim Überprüfen der Datenbank: {e}")
 
 if __name__ == "__main__":
-    check_database()
+    asyncio.run(check_database())

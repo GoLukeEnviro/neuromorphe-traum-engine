@@ -6,13 +6,13 @@ from typing import List, Dict, Any, Optional
 from unittest.mock import MagicMock
 from enum import Enum
 
-from src.schemas.api import (
+from src.schemas.schemas import (
     APIResponse, APIError, APISuccess, APIPagination, APIFilter,
     HealthCheck, HealthStatus, SystemInfo, ServiceStatus,
     AnalysisRequest, AnalysisResponse, SimilarityRequest, SimilarityResponse,
     UploadRequest, UploadResponse, DownloadRequest, DownloadResponse,
-    SearchRequest, SearchResponse, BatchRequest, BatchResponse,
-    WebSocketMessage, WebSocketEvent, NotificationMessage,
+    SearchRequest, BatchRequest, BatchResponse,
+    WebSocketMessage, NotificationMessage,
     RateLimitInfo, CacheInfo, MetricsInfo
 )
 from src.core.exceptions import ValidationError

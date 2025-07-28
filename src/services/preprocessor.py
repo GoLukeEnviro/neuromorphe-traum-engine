@@ -19,11 +19,11 @@ from scipy import signal
 # import essentia
 # import essentia.standard as es
 
-from ..db.crud import create_stem, get_stem_by_path
-from ..db.database import get_db
 from ..schemas.stem import StemCreate
 from ..core.config import settings
 from .neuro_analyzer import NeuroAnalyzer
+from ..database.service import DatabaseService
+from ..database.models import Stem
 
 logger = logging.getLogger(__name__)
 
@@ -169,12 +169,15 @@ class AudioAnalyzer:
         else:
             beat_consistency = 0.0
         
+        # Rhythmische Komplexität basierend auf Onset-Strength-Variabilität
+        onset_strength_complexity = float(np.std(oenv)) if len(oenv) > 1 else 0.0
+        
         return {
             'tempo': float(tempo),
             'beat_consistency': float(beat_consistency),
             'tempogram_mean': float(np.mean(tempogram)),
             'onset_strength_mean': float(np.mean(oenv)),
-            'rhythmic_complexity': self._calculate_rhythmic_complexity(tempogram)
+            'rhythmic_complexity': onset_strength_complexity
         }
     
     def _analyze_harmonic_features(self, audio: np.ndarray, sr: int) -> Dict[str, Any]:
@@ -191,19 +194,21 @@ class AudioAnalyzer:
         # Pitch Detection (vereinfacht)
         pitches, magnitudes = librosa.piptrack(y=harmonic, sr=sr)
         
-        # Key Detection (vereinfacht über Chroma)
+        # Robuste Tonart-Erkennung mit Krumhansl-Schmuckler-Algorithmus
+        estimated_key, key_strength = self._estimate_key(harmonic, sr)
+        
+        # Harmonische Komplexität basierend auf Chroma-Varianz
         chroma_mean = np.mean(chroma, axis=1)
-        estimated_key = np.argmax(chroma_mean)
-        key_names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+        harmonic_complexity_value = float(np.sum(harmonic**2) / np.sum(audio**2))
         
         return {
             'harmonic_ratio': float(np.sum(harmonic**2) / np.sum(audio**2)),
             'percussive_ratio': float(np.sum(percussive**2) / np.sum(audio**2)),
             'chroma_mean': [float(c) for c in chroma_mean],
-            'estimated_key': key_names[estimated_key],
-            'key_strength': float(chroma_mean[estimated_key]),
+            'estimated_key': estimated_key,
+            'key_strength': float(key_strength),
             'tonnetz_mean': [float(np.mean(t)) for t in tonnetz],
-            'harmonic_complexity': float(np.std(chroma_mean))
+            'harmonic_complexity': harmonic_complexity_value
         }
     
     def _analyze_perceptual_features(self, audio: np.ndarray, sr: int) -> Dict[str, Any]:
@@ -307,6 +312,58 @@ class AudioAnalyzer:
         complexity = entropy / max_entropy if max_entropy > 0 else 0.0
         
         return float(complexity)
+    
+    def _estimate_key(self, audio: np.ndarray, sr: int) -> tuple[str, float]:
+        """Schätzt die Tonart mit dem Krumhansl-Schmuckler-Algorithmus"""
+        
+        # Krumhansl-Schmuckler Profile für Dur und Moll
+        # Diese Profile basieren auf psychoakustischen Studien
+        major_profile = np.array([6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88])
+        minor_profile = np.array([6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17])
+        
+        # Normalisierung der Profile
+        major_profile = major_profile / np.sum(major_profile)
+        minor_profile = minor_profile / np.sum(minor_profile)
+        
+        # Chroma-Features berechnen (präzisere CQT-basierte Methode)
+        chroma = librosa.feature.chroma_cqt(y=audio, sr=sr, hop_length=self.hop_length)
+        
+        # Über die Zeit mitteln, um ein 12-dimensionales Pitch-Class-Profil zu erhalten
+        chroma_mean = np.mean(chroma, axis=1)
+        
+        # Normalisierung des Chroma-Profils
+        chroma_mean = chroma_mean / (np.sum(chroma_mean) + 1e-8)
+        
+        # Tonart-Namen
+        key_names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+        
+        best_correlation = -1
+        best_key = 'C'
+        
+        # Teste alle 24 Tonarten (12 Dur + 12 Moll)
+        for i in range(12):
+            # Rotiere die Profile für alle Grundtöne
+            major_rotated = np.roll(major_profile, i)
+            minor_rotated = np.roll(minor_profile, i)
+            
+            # Berechne Korrelation mit Dur-Profil
+            major_corr = np.corrcoef(chroma_mean, major_rotated)[0, 1]
+            if not np.isnan(major_corr) and major_corr > best_correlation:
+                best_correlation = major_corr
+                best_key = key_names[i]
+            
+            # Berechne Korrelation mit Moll-Profil
+            minor_corr = np.corrcoef(chroma_mean, minor_rotated)[0, 1]
+            if not np.isnan(minor_corr) and minor_corr > best_correlation:
+                best_correlation = minor_corr
+                best_key = key_names[i] + 'm'
+        
+        # Fallback falls keine gültige Korrelation gefunden wurde
+        if best_correlation < 0:
+            best_correlation = 0.0
+            best_key = 'C'
+        
+        return best_key, best_correlation
 
 
 class TagGenerator:
@@ -397,6 +454,7 @@ class PreprocessorService:
         self.analyzer = AudioAnalyzer()
         self.tag_generator = TagGenerator()
         self.neuro_analyzer = NeuroAnalyzer()
+        self.db_service = DatabaseService()
         
         # Verzeichnisse sicherstellen
         self.processed_dir = Path(settings.PROCESSED_DIR)
@@ -408,7 +466,7 @@ class PreprocessorService:
         
         logger.info("PreprocessorService initialisiert")
     
-    async def process_audio_file(self, file_path: str, category: str = None) -> Dict[str, Any]:
+    async def process_audio_file(self, file_path: str, category: str = None, source: str = 'original') -> Dict[str, Any]:
         """Verarbeitet eine Audio-Datei vollständig"""
         logger.info(f"Starte Verarbeitung von: {file_path}")
         
@@ -442,12 +500,11 @@ class PreprocessorService:
             
             # Stem-Daten für Datenbank vorbereiten
             stem_data = self._prepare_stem_data(
-                file_path, processed_path, category, analysis, auto_tags, neuro_features
+                file_path, processed_path, category, analysis, auto_tags, neuro_features, source
             )
             
             # In Datenbank speichern
-            db = next(get_db())
-            stem = await create_stem(db, stem_data)
+            stem = await self.db_service.insert_stem(stem_data)
             
             logger.info(f"Stem erfolgreich verarbeitet: {stem.name} (ID: {stem.id})")
             
@@ -475,7 +532,7 @@ class PreprocessorService:
                 'file_path': file_path
             }
     
-    async def _check_existing_stem(self, file_path: str) -> Optional[Dict[str, Any]]:
+    async def _check_existing_stem(self, file_path: str) -> Optional[Stem]:
         """Prüft ob Datei bereits verarbeitet wurde"""
         try:
             # Lade Audio für Hash-Berechnung
@@ -483,17 +540,9 @@ class PreprocessorService:
             audio_hash = hashlib.md5(audio.tobytes()).hexdigest()
             
             # Prüfe Datenbank
-            db = next(get_db())
-            existing_stem = await get_stem_by_hash(db, audio_hash)
+            existing_stem = await self.db_service.get_stem_by_hash(audio_hash)
             
-            if existing_stem:
-                return {
-                    'id': existing_stem.id,
-                    'name': existing_stem.name,
-                    'hash': audio_hash
-                }
-            
-            return None
+            return existing_stem
             
         except Exception as e:
             logger.warning(f"Fehler bei Duplikatsprüfung: {e}")
@@ -545,33 +594,53 @@ class PreprocessorService:
             raise
     
     def _prepare_stem_data(self, original_path: str, processed_path: str, category: str,
-                          analysis: Dict[str, Any], tags: List[str], 
-                          neuro_features: Dict[str, Any]) -> StemCreate:
+                          analysis: Dict[str, Any], tags: List[str],
+                          neuro_features: Dict[str, Any], source: str = 'original') -> StemCreate:
         """Bereitet Stem-Daten für Datenbank vor"""
         file_info = analysis['file_info']
         temporal = analysis['temporal']
         harmonic = analysis['harmonic']
         perceptual = analysis['perceptual']
         
+        # Extrahiere Daten aus neuro_features
+        semantic_analysis = neuro_features.get('semantic_analysis', {})
+        pattern_analysis = neuro_features.get('pattern_analysis', {})
+        neural_features_data = neuro_features.get('neural_features', {})
+        perceptual_mapping_data = neuro_features.get('perceptual_mapping', {})
+        overall_assessment = neuro_features.get('overall_assessment', {})
+
         return StemCreate(
-            name=Path(original_path).stem,
-            file_path=processed_path,
-            category=category,
-            tags=tags,
+            filename=Path(original_path).stem,
+            original_path=original_path,
+            processed_path=processed_path,
+            file_hash=file_info['audio_hash'],
+            duration=file_info['duration'],
+            sample_rate=file_info['sample_rate'],
+            channels=file_info['channels'],
+            file_size=file_info['file_size'],
+            
             bpm=int(temporal['tempo']),
             key=harmonic['estimated_key'],
-            duration=file_info['duration'],
-            file_size=file_info['file_size'],
-            audio_hash=file_info['audio_hash'],
-            analysis_data={
-                'temporal': temporal,
-                'spectral': analysis['spectral'],
-                'rhythmic': analysis['rhythmic'],
-                'harmonic': harmonic,
-                'perceptual': perceptual,
-                'classification': analysis['classification'],
-                'neuro_features': neuro_features
-            }
+            
+            category=category,
+            source=source,
+            auto_tags=tags,
+            
+            audio_embedding=semantic_analysis.get('audio_embedding'),
+            semantic_analysis=semantic_analysis,
+            pattern_analysis=pattern_analysis,
+            neural_features=neural_features_data,
+            perceptual_mapping=perceptual_mapping_data,
+            
+            harmonic_complexity=harmonic['harmonic_complexity'],
+            rhythmic_complexity=analysis['rhythmic']['rhythmic_complexity'],
+            
+            quality_score=overall_assessment.get('quality_assessment', {}).get('overall_quality'),
+            complexity_level=overall_assessment.get('characteristics', {}).get('complexity_level'),
+            recommended_usage=overall_assessment.get('recommended_usage'),
+            
+            processing_status="completed",
+            processed_at=datetime.utcnow()
         )
     
     async def _quarantine_file(self, file_path: str, error_message: str) -> None:
@@ -632,7 +701,7 @@ class PreprocessorService:
             logger.info(f"Verarbeite {i}/{len(audio_files)}: {file_path.name}")
             
             try:
-                result = await self.process_audio_file(str(file_path), category)
+                result = await self.process_audio_file(str(file_path), category, source='batch_processed')
                 
                 if result['success']:
                     if result['action'] == 'processed':

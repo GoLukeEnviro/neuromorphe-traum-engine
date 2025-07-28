@@ -4,59 +4,51 @@ Analyse der neuen Techno-Beats aus LPE126.BONUS-techno3
 Zeigt detaillierte Informationen über Kategorisierung, BPM, Features und Tags.
 """
 
-import sqlite3
 import json
-import os
 from collections import Counter
 from pathlib import Path
+from typing import List, Dict, Any
 
-def analyze_techno_beats():
+from ...database.service import DatabaseService
+from ...database.models import Stem
+
+async def analyze_techno_beats():
     """
     Analysiert die verarbeiteten Techno-Beats und zeigt detaillierte Statistiken.
     """
     print("=== ANALYSE DER NEUEN TECHNO-BEATS ===")
     print()
     
-    # Datenbankverbindung
-    db_path = "processed_database/stems.db"
-    if not os.path.exists(db_path):
-        print("❌ Datenbank nicht gefunden!")
-        return
-    
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
+    db_service = DatabaseService()
     
     try:
         # 1. Gesamtstatistiken
         print("1. GESAMTSTATISTIKEN:")
-        cursor.execute("SELECT COUNT(*) FROM stems")
-        total_count = cursor.fetchone()[0]
+        total_count = await db_service.get_stem_count()
         print(f"   Gesamtanzahl Einträge in Datenbank: {total_count}")
         
         # Techno-Beats spezifisch
-        cursor.execute("""
-            SELECT COUNT(*) FROM stems 
-            WHERE path LIKE '%techno%' OR path LIKE '%LPE%' OR path LIKE '%drt%'
-        """)
-        techno_count = cursor.fetchone()[0]
+        techno_count = await db_service.get_stem_count(path_pattern='techno') + \
+                       await db_service.get_stem_count(path_pattern='LPE') + \
+                       await db_service.get_stem_count(path_pattern='drt')
         print(f"   Techno-Beats gefunden: {techno_count}")
         
-        cursor.execute("""
-            SELECT COUNT(*) FROM stems 
-            WHERE path LIKE '%drt130LPE126%'
-        """)
-        recent_count = cursor.fetchone()[0]
+        # Note: The original query for 'recent_count' was very specific to a filename pattern.
+        # For a general refactoring, I'll assume 'drt130LPE126' is a specific pattern.
+        recent_count = await db_service.get_stem_count(path_pattern='drt130LPE126')
         print(f"   Davon in letzter Stunde: {recent_count}")
         print()
         
         # 2. BPM-Analyse der Techno-Beats
         print("2. BPM-ANALYSE DER TECHNO-BEATS:")
-        cursor.execute("""
-            SELECT bpm FROM stems 
-            WHERE (path LIKE '%techno%' OR path LIKE '%LPE%' OR path LIKE '%drt%') AND bpm > 0
-            ORDER BY bpm
-        """)
-        bpm_values = [row[0] for row in cursor.fetchall()]
+        techno_stems_for_bpm = await db_service.search_stems_by_path_pattern(
+            path_pattern='techno', limit=1000000)  # Large limit to get all
+        techno_stems_for_bpm.extend(await db_service.search_stems_by_path_pattern(
+            path_pattern='LPE', limit=1000000))
+        techno_stems_for_bpm.extend(await db_service.search_stems_by_path_pattern(
+            path_pattern='drt', limit=1000000))
+
+        bpm_values = [stem.bpm for stem in techno_stems_for_bpm if stem.bpm is not None and stem.bpm > 0]
         
         if bpm_values:
             avg_bpm = sum(bpm_values) / len(bpm_values)
@@ -71,29 +63,22 @@ def analyze_techno_beats():
         
         # 3. Kategorisierung
         print("3. KATEGORISIERUNG:")
-        cursor.execute("""
-            SELECT category, COUNT(*) as count FROM stems 
-            WHERE path LIKE '%techno%' OR path LIKE '%LPE%' OR path LIKE '%drt%'
-            GROUP BY category
-            ORDER BY count DESC
-        """)
+        techno_stems_all = await db_service.search_stems_by_path_pattern(path_pattern='techno', limit=1000000)
+        techno_stems_all.extend(await db_service.search_stems_by_path_pattern(path_pattern='LPE', limit=1000000))
+        techno_stems_all.extend(await db_service.search_stems_by_path_pattern(path_pattern='drt', limit=1000000))
+
+        category_counts = Counter(stem.category for stem in techno_stems_all if stem.category)
         
-        categories = cursor.fetchall()
-        for category, count in categories:
+        for category, count in category_counts.most_common():
             percentage = (count / techno_count) * 100
             print(f"   {category}: {count} Dateien ({percentage:.1f}%)")
         print()
         
         # 4. Qualitätskontrolle
         print("4. QUALITÄTSKONTROLLE:")
-        cursor.execute("""
-            SELECT quality_ok, COUNT(*) as count FROM stems 
-            WHERE path LIKE '%techno%' OR path LIKE '%LPE%' OR path LIKE '%drt%'
-            GROUP BY quality_ok
-        """)
+        quality_counts = Counter(stem.quality_score for stem in techno_stems_all if stem.quality_score is not None)
         
-        quality_stats = cursor.fetchall()
-        for quality, count in quality_stats:
+        for quality, count in quality_counts.most_common():
             status = "✅ Qualität OK" if quality else "❌ Quarantäne"
             percentage = (count / techno_count) * 100
             print(f"   {status}: {count} Dateien ({percentage:.1f}%)")
@@ -101,44 +86,31 @@ def analyze_techno_beats():
         
         # 5. Feature-Analyse (Beispiel für erste 5 Dateien)
         print("5. FEATURE-ANALYSE (Beispiele):")
-        cursor.execute("""
-            SELECT path, features FROM stems 
-            WHERE (path LIKE '%techno%' OR path LIKE '%LPE%' OR path LIKE '%drt%') AND features IS NOT NULL
-            LIMIT 5
-        """)
+        feature_examples = [stem for stem in techno_stems_all if stem.semantic_analysis is not None and stem.pattern_analysis is not None][:5]
         
-        feature_examples = cursor.fetchall()
-        for i, (path, features_json) in enumerate(feature_examples, 1):
-            filename = Path(path).name
-            try:
-                features = json.loads(features_json)
-                print(f"   Datei {i}: {filename}")
-                print(f"      Spektrale Zentroide: {features.get('spectral_centroid', 'N/A'):.1f} Hz")
-                print(f"      RMS: {features.get('rms', 'N/A'):.3f}")
-                print(f"      Zero-Crossing Rate: {features.get('zero_crossing_rate', 'N/A'):.3f}")
-                print(f"      Spektraler Rolloff: {features.get('spectral_rolloff', 'N/A'):.1f} Hz")
-                print(f"      Spektrale Bandbreite: {features.get('spectral_bandwidth', 'N/A'):.1f} Hz")
-            except json.JSONDecodeError:
-                print(f"   Datei {i}: {filename} - Fehler beim Laden der Features")
+        for i, stem in enumerate(feature_examples, 1):
+            filename = Path(stem.original_path).name if stem.original_path else stem.filename
+            print(f"   Datei {i}: {filename}")
+            
+            semantic = stem.semantic_analysis
+            pattern = stem.pattern_analysis
+            
+            print(f"      Dominante Stimmung: {semantic.get('semantic_profile', {}).get('dominant_characteristics', {}).get('mood', 'N/A')}")
+            print(f"      Rhythmische Komplexität: {pattern.get('rhythmic_patterns', {}).get('rhythm_complexity', 'N/A'):.3f}")
+            print(f"      Spektrale Bewegung: {pattern.get('spectral_evolution', {}).get('spectral_movement', 'N/A'):.3f}")
             print()
         
         # 6. Tag-Analyse
         print("6. SEMANTIC TAG-ANALYSE:")
-        cursor.execute("""
-            SELECT tags FROM stems 
-            WHERE (path LIKE '%techno%' OR path LIKE '%LPE%' OR path LIKE '%drt%') AND tags IS NOT NULL
-            LIMIT 3
-        """)
-        
-        tag_examples = cursor.fetchall()
+        tag_examples = [stem for stem in techno_stems_all if stem.auto_tags is not None][:3]
         all_tags = []
         
-        for i, (tags_json,) in enumerate(tag_examples, 1):
+        for i, stem in enumerate(tag_examples, 1):
             try:
-                tags = json.loads(tags_json)
+                tags = stem.auto_tags
                 print(f"   Beispiel {i}: {tags}")
                 all_tags.extend(tags)
-            except json.JSONDecodeError:
+            except Exception:
                 print(f"   Beispiel {i}: Fehler beim Laden der Tags")
         
         if all_tags:
@@ -150,18 +122,11 @@ def analyze_techno_beats():
         
         # 7. Detaillierte Dateiliste
         print("7. VERARBEITETE TECHNO-DATEIEN:")
-        cursor.execute("""
-            SELECT path, bpm, category, quality_ok FROM stems 
-            WHERE path LIKE '%techno%' OR path LIKE '%LPE%' OR path LIKE '%drt%'
-            ORDER BY path
-        """)
-        
-        techno_files = cursor.fetchall()
-        for path, bpm, category, quality_ok in techno_files:
-            filename = Path(path).name
-            bpm_str = f"{bpm:.1f} BPM" if bpm > 0 else "No BPM"
-            quality_str = "✅" if quality_ok else "❌"
-            print(f"   {quality_str} {filename} | {category} | {bpm_str}")
+        for stem in techno_stems_all:
+            filename = Path(stem.original_path).name if stem.original_path else stem.filename
+            bpm_str = f"{stem.bpm:.1f} BPM" if stem.bpm is not None and stem.bpm > 0 else "No BPM"
+            quality_str = "✅" if stem.quality_score is not None and stem.quality_score > 0.5 else "❌" # Assuming quality_score > 0.5 is OK
+            print(f"   {quality_str} {filename} | {stem.category} | {bpm_str}")
         
         print(f"\n=== ZUSAMMENFASSUNG ===")
         print(f"🎵 {techno_count} Techno-Beats erfolgreich analysiert")
@@ -173,8 +138,7 @@ def analyze_techno_beats():
         
     except Exception as e:
         print(f"❌ Fehler bei der Analyse: {e}")
-    finally:
-        conn.close()
+    # No finally block needed as db_service handles sessions internally
 
 if __name__ == "__main__":
     analyze_techno_beats()

@@ -8,6 +8,8 @@ from typing import List, Optional, Dict, Any, Union
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, desc, asc, func, text
+import numpy as np
+from scipy.spatial.distance import cosine
 from sqlalchemy.exc import IntegrityError
 
 from .models import (
@@ -56,7 +58,7 @@ class StemCRUD:
         db: Session,
         skip: int = 0,
         limit: int = 100,
-        instrument: Optional[str] = None,
+        category: Optional[str] = None,
         genre: Optional[str] = None,
         mood: Optional[str] = None,
         energy_level: Optional[str] = None,
@@ -65,6 +67,13 @@ class StemCRUD:
         bpm_max: Optional[float] = None,
         quality_min: Optional[float] = None,
         processing_status: Optional[str] = None,
+        harmonic_complexity_min: Optional[float] = None,
+        harmonic_complexity_max: Optional[float] = None,
+        rhythmic_complexity_min: Optional[float] = None,
+        rhythmic_complexity_max: Optional[float] = None,
+        compatible_keys: Optional[List[str]] = None,
+        audio_embedding_is_not_null: Optional[bool] = None,
+        audio_embedding_is_null: Optional[bool] = None,
         order_by: str = "created_at",
         order_desc: bool = True
     ) -> List[Stem]:
@@ -72,8 +81,8 @@ class StemCRUD:
         query = db.query(Stem)
         
         # Filter anwenden
-        if instrument:
-            query = query.filter(Stem.instrument.ilike(f"%{instrument}%"))
+        if category:
+            query = query.filter(Stem.category.ilike(f"%{category}%"))
         if genre:
             query = query.filter(Stem.genre.ilike(f"%{genre}%"))
         if mood:
@@ -82,6 +91,8 @@ class StemCRUD:
             query = query.filter(Stem.energy_level == energy_level)
         if key:
             query = query.filter(Stem.key == key)
+        if compatible_keys:
+            query = query.filter(Stem.key.in_(compatible_keys))
         if bpm_min is not None:
             query = query.filter(Stem.bpm >= bpm_min)
         if bpm_max is not None:
@@ -90,6 +101,18 @@ class StemCRUD:
             query = query.filter(Stem.quality_score >= quality_min)
         if processing_status:
             query = query.filter(Stem.processing_status == processing_status)
+        if harmonic_complexity_min is not None:
+            query = query.filter(Stem.harmonic_complexity >= harmonic_complexity_min)
+        if harmonic_complexity_max is not None:
+            query = query.filter(Stem.harmonic_complexity <= harmonic_complexity_max)
+        if rhythmic_complexity_min is not None:
+            query = query.filter(Stem.rhythmic_complexity >= rhythmic_complexity_min)
+        if rhythmic_complexity_max is not None:
+            query = query.filter(Stem.rhythmic_complexity <= rhythmic_complexity_max)
+        if audio_embedding_is_not_null is True:
+            query = query.filter(Stem.audio_embedding.isnot(None))
+        if audio_embedding_is_null is True:
+            query = query.filter(Stem.audio_embedding.is_(None))
         
         # Sortierung
         if hasattr(Stem, order_by):
@@ -102,38 +125,53 @@ class StemCRUD:
         return query.offset(skip).limit(limit).all()
     
     @staticmethod
+    def _calculate_cosine_similarity(vec1: np.ndarray, vec2: np.ndarray) -> float:
+        """Berechnet die Kosinus-Ähnlichkeit zwischen zwei Vektoren."""
+        dot_product = np.dot(vec1, vec2)
+        norm_vec1 = np.linalg.norm(vec1)
+        norm_vec2 = np.linalg.norm(vec2)
+        if norm_vec1 == 0 or norm_vec2 == 0:
+            return 0.0  # Vermeidet Division durch Null
+        return dot_product / (norm_vec1 * norm_vec2)
+
+    @staticmethod
     def search_stems_semantic(
         db: Session,
-        query_text: str,
+        query_embedding: List[float],
         limit: int = 50,
         similarity_threshold: float = 0.5
     ) -> List[Stem]:
-        """Semantische Suche in Stems (vereinfacht)"""
-        # Einfache Textsuche in Tags und Beschreibungen
-        # In Produktion würde hier die CLAP-Embedding-Suche implementiert
-        
-        search_terms = query_text.lower().split()
-        
-        query = db.query(Stem).filter(
-            Stem.processing_status == "completed"
-        )
-        
-        # Suche in verschiedenen Feldern
-        conditions = []
-        for term in search_terms:
-            term_conditions = [
-                Stem.instrument.ilike(f"%{term}%"),
-                Stem.genre.ilike(f"%{term}%"),
-                Stem.mood.ilike(f"%{term}%"),
-                Stem.energy_level.ilike(f"%{term}%"),
-                Stem.filename.ilike(f"%{term}%")
-            ]
-            conditions.append(or_(*term_conditions))
-        
-        if conditions:
-            query = query.filter(and_(*conditions))
-        
-        return query.order_by(desc(Stem.quality_score)).limit(limit).all()
+        """Semantische Suche in Stems basierend auf CLAP-Embeddings."""
+        logger.info(f"Starte semantische Suche mit Limit {limit} und Threshold {similarity_threshold}")
+
+        query_vec = np.array(query_embedding, dtype=np.float32)
+
+        # Alle Stems mit Embeddings abrufen
+        stems_with_embeddings = db.query(Stem).filter(
+            Stem.processing_status == "completed",
+            Stem.audio_embedding.isnot(None)
+        ).all()
+
+        results = []
+        for stem in stems_with_embeddings:
+            try:
+                # Konvertiere JSON-Embedding zu NumPy-Array
+                stem_embedding = np.array(stem.audio_embedding, dtype=np.float32)
+                
+                # Kosinus-Ähnlichkeit berechnen
+                similarity = StemCRUD._calculate_cosine_similarity(query_vec, stem_embedding)
+                
+                if similarity >= similarity_threshold:
+                    results.append((similarity, stem))
+            except Exception as e:
+                logger.warning(f"Fehler beim Verarbeiten des Embeddings für Stem ID {stem.id}: {e}")
+                continue
+
+        # Sortieren nach Ähnlichkeit (absteigend)
+        results.sort(key=lambda x: x[0], reverse=True)
+
+        # Nur die Stem-Objekte zurückgeben
+        return [stem for similarity, stem in results[:limit]]
 
     @staticmethod
     async def search_stems_by_tags_and_category(
@@ -190,6 +228,89 @@ class StemCRUD:
         return stem
     
     @staticmethod
+    def get_stem_by_path(db: Session, file_path: str) -> Optional[Stem]:
+        """Holt einen Stem anhand des Dateipfads"""
+        return db.query(Stem).filter(
+            or_(
+                Stem.original_path == file_path,
+                Stem.processed_path == file_path
+            )
+        ).first()
+    
+    @staticmethod
+    def get_stems_by_category(db: Session, category: str, limit: int = 50) -> List[Stem]:
+        """Holt Stems nach Kategorie"""
+        return db.query(Stem).filter(
+            Stem.category.ilike(f"%{category}%"),
+            Stem.processing_status == "completed"
+        ).order_by(func.random()).limit(limit).all()
+    
+    
+    
+    @staticmethod
+    def get_compatible_keys(base_key: str) -> List[str]:
+        """Gibt harmonisch kompatible Tonarten zurück"""
+        # Definiere harmonische Kompatibilität basierend auf Quintenzirkel
+        compatibility_map = {
+            'C': ['C', 'Am', 'F', 'G', 'Dm', 'Em'],
+            'Am': ['Am', 'C', 'F', 'G', 'Dm', 'Em'],
+            'G': ['G', 'Em', 'C', 'D', 'Am', 'Bm'],
+            'Em': ['Em', 'G', 'C', 'D', 'Am', 'Bm'],
+            'D': ['D', 'Bm', 'G', 'A', 'Em', 'F#m'],
+            'Bm': ['Bm', 'D', 'G', 'A', 'Em', 'F#m'],
+            'A': ['A', 'F#m', 'D', 'E', 'Bm', 'C#m'],
+            'F#m': ['F#m', 'A', 'D', 'E', 'Bm', 'C#m'],
+            'E': ['E', 'C#m', 'A', 'B', 'F#m', 'G#m'],
+            'C#m': ['C#m', 'E', 'A', 'B', 'F#m', 'G#m'],
+            'B': ['B', 'G#m', 'E', 'F#', 'C#m', 'D#m'],
+            'G#m': ['G#m', 'B', 'E', 'F#', 'C#m', 'D#m'],
+            'F#': ['F#', 'D#m', 'B', 'C#', 'G#m', 'A#m'],
+            'D#m': ['D#m', 'F#', 'B', 'C#', 'G#m', 'A#m'],
+            'F': ['F', 'Dm', 'Bb', 'C', 'Gm', 'Am'],
+            'Dm': ['Dm', 'F', 'Bb', 'C', 'Gm', 'Am'],
+            'Bb': ['Bb', 'Gm', 'F', 'Eb', 'Dm', 'Cm'],
+            'Gm': ['Gm', 'Bb', 'F', 'Eb', 'Dm', 'Cm'],
+            'Eb': ['Eb', 'Cm', 'Bb', 'Ab', 'Gm', 'Fm'],
+            'Cm': ['Cm', 'Eb', 'Bb', 'Ab', 'Gm', 'Fm'],
+            'Ab': ['Ab', 'Fm', 'Eb', 'Db', 'Cm', 'Bbm'],
+            'Fm': ['Fm', 'Ab', 'Eb', 'Db', 'Cm', 'Bbm'],
+            'Db': ['Db', 'Bbm', 'Ab', 'Gb', 'Fm', 'Ebm'],
+            'Bbm': ['Bbm', 'Db', 'Ab', 'Gb', 'Fm', 'Ebm'],
+            'Gb': ['Gb', 'Ebm', 'Db', 'Cb', 'Bbm', 'Abm'],
+            'Ebm': ['Ebm', 'Gb', 'Db', 'Cb', 'Bbm', 'Abm']
+        }
+        
+        return compatibility_map.get(base_key, [base_key])
+    
+    @staticmethod
+    def search_harmonically_compatible_stems(
+        db: Session,
+        base_key: str,
+        category: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        limit: int = 50
+    ) -> List[Stem]:
+        """Sucht harmonisch kompatible Stems basierend auf der Basis-Tonart"""
+        compatible_keys = StemCRUD.get_compatible_keys(base_key)
+        
+        query = db.query(Stem).filter(
+            Stem.processing_status == "completed",
+            Stem.key.in_(compatible_keys)
+        )
+        
+        if category:
+            query = query.filter(Stem.category.ilike(f"%{category}%"))
+        
+        if tags:
+            tag_conditions = []
+            for tag in tags:
+                tag_conditions.append(Stem.tags.ilike(f'%"{tag}"%'))
+            if tag_conditions:
+                query = query.filter(or_(*tag_conditions))
+        
+        return query.order_by(desc(Stem.quality_score)).limit(limit).all()
+    
+    @staticmethod
     def delete_stem(db: Session, stem_id: int) -> bool:
         """Löscht einen Stem"""
         stem = db.query(Stem).filter(Stem.id == stem_id).first()
@@ -221,13 +342,13 @@ class StemCRUD:
             Stem.quality_score.isnot(None)
         ).scalar()
         
-        # Verteilung nach Instrumenten
-        instrument_dist = db.query(
-            Stem.instrument,
+        # Verteilung nach Kategorien
+        category_dist = db.query(
+            Stem.category,
             func.count(Stem.id).label('count')
         ).filter(
-            Stem.instrument.isnot(None)
-        ).group_by(Stem.instrument).all()
+            Stem.category.isnot(None)
+        ).group_by(Stem.category).all()
         
         # Verteilung nach Genres
         genre_dist = db.query(
@@ -242,9 +363,29 @@ class StemCRUD:
             'processed_stems': processed_stems,
             'processing_rate': processed_stems / total_stems if total_stems > 0 else 0,
             'average_quality': float(avg_quality) if avg_quality else 0,
-            'instrument_distribution': {item.instrument: item.count for item in instrument_dist},
+            'category_distribution': {item.category: item.count for item in category_dist},
             'genre_distribution': {item.genre: item.count for item in genre_dist}
         }
+
+    @staticmethod
+    def get_stem_count(db: Session, path_pattern: Optional[str] = None) -> int:
+        """Holt die Anzahl der Stems, optional gefiltert nach Pfadmuster."""
+        query = db.query(func.count(Stem.id))
+        if path_pattern:
+            query = query.filter(or_(
+                Stem.original_path.ilike(f"%{path_pattern}%"),
+                Stem.processed_path.ilike(f"%{path_pattern}%")
+            ))
+        return query.scalar()
+
+    @staticmethod
+    def search_stems_by_path_pattern(db: Session, path_pattern: str, limit: int = 50) -> List[Stem]:
+        """Sucht Stems basierend auf einem Pfadmuster."""
+        query = db.query(Stem).filter(or_(
+            Stem.original_path.ilike(f"%{path_pattern}%"),
+            Stem.processed_path.ilike(f"%{path_pattern}%")
+        ))
+        return query.limit(limit).all()
 
 
 class GeneratedTrackCRUD:
@@ -639,3 +780,42 @@ class ConfigurationCRUD:
         return db.query(ConfigurationSetting).filter(
             ConfigurationSetting.category == category
         ).order_by(ConfigurationSetting.key).all()
+
+
+# Convenience functions for direct import
+def get_stem_by_id(db: Session, stem_id: int) -> Optional[Stem]:
+    """Holt einen Stem anhand der ID"""
+    return StemCRUD.get_stem_by_id(db, stem_id)
+
+
+def get_stem_by_path(db: Session, file_path: str) -> Optional[Stem]:
+    """Holt einen Stem anhand des Dateipfads"""
+    return StemCRUD.get_stem_by_path(db, file_path)
+
+
+def get_stems_by_category(db: Session, category: str, limit: int = 50) -> List[Stem]:
+    """Holt Stems nach Kategorie"""
+    return StemCRUD.get_stems_by_category(db, category, limit)
+
+
+
+
+
+def create_stem(db: Session, stem_data: Dict[str, Any]) -> Stem:
+    """Erstellt einen neuen Stem"""
+    return StemCRUD.create_stem(db, stem_data)
+
+
+def get_processing_job(db: Session, job_id: int) -> Optional[ProcessingJob]:
+    """Holt einen Verarbeitungsauftrag anhand der ID"""
+    return ProcessingJobCRUD.get_job_by_id(db, job_id)
+
+
+def update_processing_job(db: Session, job_id: int, update_data: Dict[str, Any]) -> Optional[ProcessingJob]:
+    """Aktualisiert einen Verarbeitungsauftrag"""
+    return ProcessingJobCRUD.update_job_status(db, job_id, **update_data)
+
+
+def create_processing_job(db: Session, job_data: Dict[str, Any]) -> ProcessingJob:
+    """Erstellt einen neuen Verarbeitungsauftrag"""
+    return ProcessingJobCRUD.create_job(db, job_data)
