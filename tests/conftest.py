@@ -1,14 +1,20 @@
+import sys
+from pathlib import Path
+import os
+
+# Add the project root to sys.path
+project_root = Path(__file__).parent.parent.absolute()
+sys.path.insert(0, str(project_root))
+
 """Pytest-Konfiguration und gemeinsame Fixtures für Tests"""
 
 import asyncio
-import os
 import tempfile
-from pathlib import Path
-from typing import AsyncGenerator, Generator
+from typing import AsyncGenerator, Generator, List
 from unittest.mock import MagicMock
 
 import pytest
-import pytest_asyncio
+
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine

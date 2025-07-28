@@ -15,8 +15,8 @@ from pathlib import Path
 from typing import Optional
 
 # Projekt-Root zum Python-Path hinzufügen
-project_root = Path(__file__).parent
-sys.path.insert(0, str(project_root / "src"))
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
 
 from core.config import get_settings
 from core.logging import setup_logging, get_logger

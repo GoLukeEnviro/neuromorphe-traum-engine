@@ -7,7 +7,7 @@ Diese Endpunkte implementieren den vollständigen lernenden Kreislauf:
 - Track Generation: Vollständige Track-Komposition
 """
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, UploadFile, File
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, UploadFile, File, Depends
 from pydantic import BaseModel, Field
 from typing import List, Dict, Optional, Any
 import os
@@ -20,15 +20,23 @@ from ...services.training_service import TrainingService
 from ...services.generative_service import GenerativeService
 from ...services.preprocessor import PreprocessorService
 from ...core.logging import get_logger
+from ...core.config import settings
 
 logger = get_logger(__name__)
 router = APIRouter()
 
-# Service-Instanzen
-separation_service = SeparationService()
-training_service = TrainingService()
-generative_service = GenerativeService()
-preprocessor_service = PreprocessorService()
+# Dependency-Funktionen für Services
+def get_separation_service() -> SeparationService:
+    return SeparationService()
+
+def get_training_service() -> TrainingService:
+    return TrainingService()
+
+def get_generative_service() -> GenerativeService:
+    return GenerativeService()
+
+def get_preprocessor_service() -> PreprocessorService:
+    return PreprocessorService()
 
 
 # Pydantic Models für Request/Response
@@ -130,7 +138,8 @@ class TrackGenerationRequest(BaseModel):
 
 # Background Task Functions
 async def background_training_task(category: str, epochs: int, batch_size: int, 
-                                 learning_rate: float, latent_dim: int):
+                                 learning_rate: float, latent_dim: int,
+                                 training_service: TrainingService = Depends(get_training_service)):
     """Background Task für VAE-Training"""
     try:
         logger.info(f"Starte Background-Training für Kategorie: {category}")
@@ -147,7 +156,9 @@ async def background_training_task(category: str, epochs: int, batch_size: int,
 
 
 async def background_generation_and_processing_task(category: str, num_variations: int, 
-                                                  generation_mode: str, interpolation_factor: float):
+                                                  generation_mode: str, interpolation_factor: float,
+                                                  generative_service: GenerativeService = Depends(get_generative_service),
+                                                  preprocessor_service: PreprocessorService = Depends(get_preprocessor_service)):
     """Background Task für Generierung und automatisches Processing"""
     try:
         logger.info(f"Starte Background-Generierung für Kategorie: {category}")
@@ -180,7 +191,9 @@ async def background_generation_and_processing_task(category: str, num_variation
 
 # API Endpoints
 @router.post("/preprocess")
-async def preprocess_audio(request: PreprocessRequest, background_tasks: BackgroundTasks):
+async def preprocess_audio(request: PreprocessRequest, background_tasks: BackgroundTasks,
+                           separation_service: SeparationService = Depends(get_separation_service),
+                           preprocessor_service: PreprocessorService = Depends(get_preprocessor_service)):
     """
     Preprocessing-Endpunkt für Stem-Separation und -Analyse
     
@@ -262,7 +275,8 @@ async def preprocess_audio(request: PreprocessRequest, background_tasks: Backgro
 
 
 @router.post("/preprocess/upload")
-async def preprocess_uploaded_audio(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
+async def preprocess_uploaded_audio(background_tasks: BackgroundTasks, file: UploadFile = File(...),
+                                    preprocessor_service: PreprocessorService = Depends(get_preprocessor_service)):
     """
     Preprocessing für hochgeladene Audio-Dateien
     """
@@ -292,7 +306,8 @@ async def preprocess_uploaded_audio(background_tasks: BackgroundTasks, file: Upl
 
 
 @router.post("/train")
-async def train_vae_model(request: TrainingRequest, background_tasks: BackgroundTasks):
+async def train_vae_model(request: TrainingRequest, background_tasks: BackgroundTasks,
+                          training_service: TrainingService = Depends(get_training_service)):
     """
     Training-Endpunkt für VAE-Modelle
     
@@ -309,7 +324,8 @@ async def train_vae_model(request: TrainingRequest, background_tasks: Background
             request.epochs,
             request.batch_size,
             request.learning_rate,
-            request.latent_dim
+            request.latent_dim,
+            training_service # Übergabe des Service an die Background-Task
         )
         
         return {
@@ -330,7 +346,8 @@ async def train_vae_model(request: TrainingRequest, background_tasks: Background
 
 
 @router.post("/train/batch")
-async def train_all_categories(background_tasks: BackgroundTasks, min_samples: int = Query(10, ge=5, le=100)):
+async def train_all_categories(background_tasks: BackgroundTasks, min_samples: int = Query(10, ge=5, le=100),
+                               training_service: TrainingService = Depends(get_training_service)):
     """
     Batch-Training für alle verfügbaren Kategorien
     """
@@ -353,7 +370,9 @@ async def train_all_categories(background_tasks: BackgroundTasks, min_samples: i
 
 
 @router.post("/generate")
-async def generate_stems(request: GenerationRequest, background_tasks: BackgroundTasks):
+async def generate_stems(request: GenerationRequest, background_tasks: BackgroundTasks,
+                         generative_service: GenerativeService = Depends(get_generative_service),
+                         preprocessor_service: PreprocessorService = Depends(get_preprocessor_service)):
     """
     Generierungs-Endpunkt für neue Stems
     
@@ -367,7 +386,9 @@ async def generate_stems(request: GenerationRequest, background_tasks: Backgroun
                 request.category,
                 request.num_variations,
                 request.generation_mode,
-                request.interpolation_factor
+                request.interpolation_factor,
+                generative_service, # Übergabe des Service an die Background-Task
+                preprocessor_service # Übergabe des Service an die Background-Task
             )
             
             return {
@@ -395,7 +416,9 @@ async def generate_stems(request: GenerationRequest, background_tasks: Backgroun
 
 
 @router.post("/generate/hybrid")
-async def generate_hybrid_stems(request: HybridGenerationRequest, background_tasks: BackgroundTasks):
+async def generate_hybrid_stems(request: HybridGenerationRequest, background_tasks: BackgroundTasks,
+                                generative_service: GenerativeService = Depends(get_generative_service),
+                                preprocessor_service: PreprocessorService = Depends(get_preprocessor_service)):
     """
     Generierung von Hybrid-Stems durch Interpolation zwischen zwei Kategorien
     """
@@ -426,7 +449,8 @@ async def generate_hybrid_stems(request: HybridGenerationRequest, background_tas
 
 @router.post("/generate/batch")
 async def batch_generate_all_categories(background_tasks: BackgroundTasks, 
-                                      num_variations: int = Query(5, ge=1, le=20)):
+                                      num_variations: int = Query(5, ge=1, le=20),
+                                      generative_service: GenerativeService = Depends(get_generative_service)):
     """
     Batch-Generierung für alle verfügbaren trainierten Kategorien
     """
@@ -446,7 +470,7 @@ async def batch_generate_all_categories(background_tasks: BackgroundTasks,
 
 # Status und Info Endpoints
 @router.get("/models/available")
-async def get_available_models():
+async def get_available_models(training_service: TrainingService = Depends(get_training_service)):
     """
     Gibt Liste aller verfügbaren trainierten VAE-Modelle zurück
     """
@@ -463,7 +487,7 @@ async def get_available_models():
 
 
 @router.get("/generated/info")
-async def get_generated_stems_info():
+async def get_generated_stems_info(generative_service: GenerativeService = Depends(get_generative_service)):
     """
     Gibt Informationen über alle generierten Stems zurück
     """
@@ -480,7 +504,7 @@ async def get_generated_stems_info():
 
 
 @router.post("/cache/clear")
-async def clear_model_cache():
+async def clear_model_cache(generative_service: GenerativeService = Depends(get_generative_service)):
     """
     Leert den Modell-Cache
     """

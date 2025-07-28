@@ -1,10 +1,17 @@
-# src/core/config.py
+"""
+Konfigurationseinstellungen für die Neuromorphe Traum-Engine.
+
+Definiert verschiedene Einstellungen für die Anwendung, Datenbank, Dateispeicherung,
+CLAP-Modell und API-Zugriff.
+"""
+
 from pydantic_settings import BaseSettings
 from typing import List
 import os
 from pathlib import Path
 
 class Settings(BaseSettings):
+    """Anwendungseinstellungen, geladen aus Umgebungsvariablen oder .env-Datei."""
     # App
     PROJECT_NAME: str = "Neuromorphe Traum-Engine v2.0"
     API_V1_STR: str = "/api/v1"
@@ -35,6 +42,7 @@ class Settings(BaseSettings):
     CORS_ORIGINS: List[str] = ["http://localhost:8501", "http://localhost:3000"]
 
     def get_logs_path(self) -> Path:
+        """Gibt den Pfad zum Log-Verzeichnis zurück."""
         return Path("./logs")
     
     class Config:

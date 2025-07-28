@@ -30,7 +30,7 @@ from ..schemas.schemas import (
 )
 from ..services.preprocessor import PreprocessorService
 from ..services.arranger import ArrangerService
-from ..services.renderer import RendererService
+from ..services.live_player_service import LivePlayerService
 from ..services.neuro_analyzer import NeuroAnalyzer
 from ..core.config import settings
 from ..core.logging import get_logger
@@ -48,7 +48,7 @@ logger = get_logger(__name__)
 # Service-Instanzen (werden bei Bedarf initialisiert)
 _preprocessor_service = None
 _arranger_service = None
-_renderer_service = None
+_live_player_service = None
 _neuro_analyzer = None
 
 
@@ -68,12 +68,12 @@ def get_arranger_service() -> ArrangerService:
     return _arranger_service
 
 
-def get_renderer_service() -> RendererService:
-    """Dependency für RendererService"""
-    global _renderer_service
-    if _renderer_service is None:
-        _renderer_service = RendererService()
-    return _renderer_service
+def get_live_player_service() -> LivePlayerService:
+    """Dependency für LivePlayerService"""
+    global _live_player_service
+    if _live_player_service is None:
+        _live_player_service = LivePlayerService()
+    return _live_player_service
 
 
 def get_neuro_analyzer() -> NeuroAnalyzer:
@@ -479,36 +479,20 @@ async def preprocess_audio(
         raise HTTPException(status_code=500, detail="Failed to start preprocessing")
 
 
-@api_router.post("/generate-track", response_model=ProcessingJobResponse)
-async def generate_track(
+@api_router.post("/play-track", response_model=SuccessResponse)
+async def play_track(
     request: GenerationRequest,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    live_player: LivePlayerService = Depends(get_live_player_service)
 ):
-    """Neuen Track generieren"""
+    """Startet die Live-Wiedergabe eines Tracks"""
     try:
-        # Track-Eintrag erstellen
-        track_data = TrackCreate(
-            title=request.title or f"Generated Track {datetime.utcnow().strftime('%Y%m%d_%H%M%S')}",
-            original_prompt=request.prompt,
-            target_bpm=request.target_bpm,
-            target_key=request.target_key,
-            target_genre=request.target_genre,
-            target_mood=request.target_mood,
-            target_energy=request.target_energy,
-            sample_rate=request.sample_rate,
-            channels=request.channels,
-            tags=request.tags
-        )
-        
-        track = crud.create_track(db, track_data)
-        
-        # Generation-Job erstellen
+        # Generation-Job erstellen (für die Arrangement-Erstellung)
         job_data = ProcessingJobCreate(
-            job_type="generate",
+            job_type="play",
             priority=7,
             input_data={
-                "track_id": track.id,
                 "generation_request": request.dict()
             }
         )
@@ -516,13 +500,17 @@ async def generate_track(
         job = crud.create_processing_job(db, job_data)
         
         # Background-Task starten
-        background_tasks.add_task(run_generation_job, job.id)
+        background_tasks.add_task(run_playback_job, job.id, live_player)
         
-        return ProcessingJobResponse.from_orm(job)
+        return SuccessResponse(
+            message="Playback initiated",
+            data={"job_id": job.id},
+            timestamp=datetime.utcnow()
+        )
         
     except Exception as e:
-        logger.error(f"Failed to start track generation: {e}")
-        raise HTTPException(status_code=500, detail="Failed to start track generation")
+        logger.error(f"Failed to initiate playback: {e}")
+        raise HTTPException(status_code=500, detail="Failed to initiate playback")
 
 
 # ============================================================================
@@ -640,19 +628,18 @@ async def run_preprocessing_job(job_id: int):
         db.close()
 
 
-async def run_generation_job(job_id: int):
+async def run_playback_job(job_id: int, live_player: LivePlayerService):
     """Generation-Job im Hintergrund ausführen"""
     db = next(get_db())
     arranger = get_arranger_service()
-    renderer = get_renderer_service()
+    live_player = get_live_player_service()
     
     try:
         job = crud.get_processing_job(db, job_id)
         if not job:
             return
         
-        track_id = job.input_data["track_id"]
-        generation_request = job.input_data["generation_request"]
+        
         
         # Job als "processing" markieren
         crud.update_processing_job(db, job_id, {
@@ -660,76 +647,38 @@ async def run_generation_job(job_id: int):
             "started_at": datetime.utcnow(),
             "current_step": "Analyzing prompt"
         })
-        
-        # Track-Status aktualisieren
-        crud.update_track(db, track_id, {"generation_status": "analyzing"})
-        
-        # Schritt 1: Arrangement erstellen
         crud.update_processing_job(db, job_id, {
             "progress_percentage": 20.0,
             "current_step": "Creating arrangement plan"
         })
-        crud.update_track(db, track_id, {"generation_status": "arranging"})
         
         arrangement_plan = await arranger.create_arrangement(
-            generation_request["prompt"],
+            job.input_data["generation_request"]["prompt"],
             db,
-            **{k: v for k, v in generation_request.items() if k != "prompt"}
+            **{k: v for k, v in job.input_data["generation_request"].items() if k != "prompt"}
         )
         
-        # Arrangement-Plan speichern
-        crud.update_track(db, track_id, {
-            "arrangement_plan": arrangement_plan.dict(),
-            "track_structure": arrangement_plan.dict()["sections"]
-        })
-        
-        # Schritt 2: Track rendern
+        # Schritt 2: Live-Wiedergabe starten
         crud.update_processing_job(db, job_id, {
             "progress_percentage": 60.0,
-            "current_step": "Rendering audio track"
-        })
-        crud.update_track(db, track_id, {"generation_status": "rendering"})
-        
-        output_path, preview_path, metadata = await renderer.render_track(
-            arrangement_plan,
-            track_id,
-            db,
-            progress_callback=lambda p: crud.update_processing_job(db, job_id, {
-                "progress_percentage": 60.0 + (p * 0.4)
-            })
-        )
-        
-        # Track finalisieren
-        crud.update_track(db, track_id, {
-            "output_path": output_path,
-            "preview_path": preview_path,
-            "metadata": metadata,
-            "generation_status": "completed",
-            "generated_at": datetime.utcnow()
+            "current_step": "Starting live playback"
         })
         
-        # Job als abgeschlossen markieren
+        live_player.play(arrangement_plan)
+        
+        # Job als abgeschlossen markieren (für den Start der Wiedergabe)
         crud.update_processing_job(db, job_id, {
             "job_status": "completed",
             "progress_percentage": 100.0,
-            "current_step": "Track generation completed",
+            "current_step": "Live playback started",
             "completed_at": datetime.utcnow(),
             "output_data": {
-                "track_id": track_id,
-                "output_path": output_path,
-                "preview_path": preview_path
+                "status": "playback_initiated"
             }
         })
         
     except Exception as e:
-        logger.error(f"Generation job {job_id} failed: {e}")
-        
-        # Track-Status auf failed setzen
-        if "track_id" in job.input_data:
-            crud.update_track(db, job.input_data["track_id"], {
-                "generation_status": "failed",
-                "generation_error": str(e)
-            })
+        logger.error(f"Playback job {job_id} failed: {e}")
         
         crud.update_processing_job(db, job_id, {
             "job_status": "failed",

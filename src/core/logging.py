@@ -8,7 +8,7 @@ import sys
 import logging
 import logging.handlers
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from datetime import datetime
 from functools import lru_cache
 
@@ -16,10 +16,13 @@ from .config import settings
 
 
 class ColoredFormatter(logging.Formatter):
-    """Farbiger Formatter für Console-Output"""
+    """Farbiger Formatter für Console-Output.
+
+    Fügt ANSI-Farbcodes zu Log-Nachrichten basierend auf ihrem Log-Level hinzu.
+    """
     
     # ANSI-Farbcodes
-    COLORS = {
+    COLORS: Dict[str, str] = {
         'DEBUG': '\033[36m',      # Cyan
         'INFO': '\033[32m',       # Grün
         'WARNING': '\033[33m',    # Gelb
@@ -28,13 +31,14 @@ class ColoredFormatter(logging.Formatter):
         'RESET': '\033[0m'        # Reset
     }
     
-    def format(self, record):
+    def format(self, record: logging.LogRecord) -> str:
+        """Formatiert den Log-Record mit Farbcodes."""
         # Farbe basierend auf Log-Level
-        color = self.COLORS.get(record.levelname, self.COLORS['RESET'])
-        reset = self.COLORS['RESET']
+        color: str = self.COLORS.get(record.levelname, self.COLORS['RESET'])
+        reset: str = self.COLORS['RESET']
         
         # Original-Formatter anwenden
-        formatted = super().format(record)
+        formatted: str = super().format(record)
         
         # Farbe nur für Terminal-Output
         if hasattr(sys.stderr, 'isatty') and sys.stderr.isatty():
@@ -43,11 +47,15 @@ class ColoredFormatter(logging.Formatter):
 
 
 class StructuredFormatter(logging.Formatter):
-    """Strukturierter Formatter für JSON-ähnliche Logs"""
+    """Strukturierter Formatter für JSON-ähnliche Logs.
+
+    Formatiert Log-Records als JSON-Strings, inklusive Extra-Feldern.
+    """
     
-    def format(self, record):
+    def format(self, record: logging.LogRecord) -> str:
+        """Formatiert den Log-Record als JSON-String."""
         # Basis-Informationen
-        log_entry = {
+        log_entry: Dict[str, Any] = {
             'timestamp': datetime.utcnow().isoformat(),
             'level': record.levelname,
             'logger': record.name,
@@ -76,9 +84,13 @@ class StructuredFormatter(logging.Formatter):
 
 
 class PerformanceFilter(logging.Filter):
-    """Filter für Performance-Logging"""
+    """Filter für Performance-Logging.
+
+    Fügt dem Log-Record Performance-Metriken hinzu und markiert langsame Operationen.
+    """
     
-    def filter(self, record):
+    def filter(self, record: logging.LogRecord) -> bool:
+        """Fügt Performance-Metriken zum Log-Record hinzu."""
         # Performance-Metriken hinzufügen
         if hasattr(record, 'duration'):
             if record.duration > 1.0:  # Langsame Operationen markieren
@@ -88,16 +100,20 @@ class PerformanceFilter(logging.Filter):
 
 
 class SensitiveDataFilter(logging.Filter):
-    """Filter zum Entfernen sensibler Daten aus Logs"""
+    """Filter zum Entfernen sensibler Daten aus Logs.
+
+    Ersetzt definierte sensible Muster in Log-Nachrichten durch Platzhalter.
+    """
     
-    SENSITIVE_PATTERNS = [
+    SENSITIVE_PATTERNS: List[str] = [
         'password', 'token', 'key', 'secret', 'auth',
         'credential', 'api_key', 'access_token'
     ]
     
-    def filter(self, record):
+    def filter(self, record: logging.LogRecord) -> bool:
+        """Prüft und maskiert sensible Daten im Log-Record."""
         # Nachricht auf sensible Daten prüfen
-        message = record.getMessage().lower()
+        message: str = record.getMessage().lower()
         
         for pattern in self.SENSITIVE_PATTERNS:
             if pattern in message:
@@ -112,24 +128,27 @@ class SensitiveDataFilter(logging.Filter):
 
 
 class LoggerManager:
-    """Manager für Logger-Konfiguration"""
+    """Manager für Logger-Konfiguration.
+
+    Verwaltet die Erstellung und Konfiguration von Loggern und Handlern.
+    """
     
     def __init__(self, settings=None):
         self.settings = settings
         self._loggers: Dict[str, logging.Logger] = {}
-        self._handlers_configured = False
+        self._handlers_configured: bool = False
         
-    def setup_logging(self):
-        """Logging-System konfigurieren"""
+    def setup_logging(self) -> None:
+        """Logging-System konfigurieren."""
         if self._handlers_configured:
             return
         
         # Root-Logger konfigurieren
-        root_logger = logging.getLogger()
+        root_logger: logging.Logger = logging.getLogger()
         root_logger.setLevel(getattr(logging, self.settings.LOG_LEVEL))
 
         # Sicherstellen, dass das Log-Verzeichnis existiert
-        log_dir = self.settings.get_logs_path()
+        log_dir: Path = self.settings.get_logs_path()
         log_dir.mkdir(parents=True, exist_ok=True)
         
         # Bestehende Handler entfernen
@@ -137,22 +156,22 @@ class LoggerManager:
             root_logger.removeHandler(handler)
         
         # Console-Handler
-        console_handler = self._create_console_handler()
+        console_handler: logging.Handler = self._create_console_handler()
         root_logger.addHandler(console_handler)
         
         # File-Handler
-        file_handler = self._create_file_handler()
+        file_handler: Optional[logging.Handler] = self._create_file_handler()
         if file_handler:
             root_logger.addHandler(file_handler)
         
         # Error-File-Handler
-        error_handler = self._create_error_handler()
+        error_handler: Optional[logging.Handler] = self._create_error_handler()
         if error_handler:
             root_logger.addHandler(error_handler)
         
         # Performance-Handler (wenn aktiviert)
         if self.settings.PERFORMANCE_TRACKING:
-            perf_handler = self._create_performance_handler()
+            perf_handler: Optional[logging.Handler] = self._create_performance_handler()
             if perf_handler:
                 root_logger.addHandler(perf_handler)
         
@@ -162,22 +181,22 @@ class LoggerManager:
         self._handlers_configured = True
         
         # Startup-Nachricht
-        logger = self.get_logger('neuromorphe_traum_engine')
+        logger: logging.Logger = self.get_logger('neuromorphe_traum_engine')
         logger.info(f"Logging system initialized - Level: {self.settings.LOG_LEVEL}")
     
     def _create_console_handler(self) -> logging.Handler:
-        """Console-Handler erstellen"""
-        handler = logging.StreamHandler(sys.stdout)
+        """Erstellt und konfiguriert einen Console-Handler."""
+        handler: logging.Handler = logging.StreamHandler(sys.stdout)
         
         if self.settings.DEBUG or self.settings.DEVELOPMENT_MODE:
             # Farbiger Formatter für Entwicklung
-            formatter = ColoredFormatter(
+            formatter: logging.Formatter = ColoredFormatter(
                 fmt='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                 datefmt='%H:%M:%S'
             )
         else:
             # Einfacher Formatter für Produktion
-            formatter = logging.Formatter(
+            formatter: logging.Formatter = logging.Formatter(
                 fmt=self.settings.LOG_FORMAT,
                 datefmt='%Y-%m-%d %H:%M:%S'
             )
@@ -191,12 +210,12 @@ class LoggerManager:
         return handler
     
     def _create_file_handler(self) -> Optional[logging.Handler]:
-        """File-Handler erstellen"""
+        """Erstellt und konfiguriert einen File-Handler."""
         try:
-            log_file = self.settings.get_logs_path() / 'neuromorphe_traum_engine.log'
+            log_file: Path = self.settings.get_logs_path() / 'neuromorphe_traum_engine.log'
             
             # Rotating File Handler
-            handler = logging.handlers.RotatingFileHandler(
+            handler: logging.Handler = logging.handlers.RotatingFileHandler(
                 filename=log_file,
                 maxBytes=self.settings.LOG_FILE_MAX_SIZE_MB * 1024 * 1024,
                 backupCount=self.settings.LOG_FILE_BACKUP_COUNT,
@@ -205,12 +224,12 @@ class LoggerManager:
             
             # Strukturierter Formatter für Datei-Logs
             if self.settings.DEBUG:
-                formatter = logging.Formatter(
+                formatter: logging.Formatter = logging.Formatter(
                     fmt='%(asctime)s - %(name)s - %(levelname)s - %(module)s:%(lineno)d - %(message)s',
                     datefmt='%Y-%m-%d %H:%M:%S'
                 )
             else:
-                formatter = StructuredFormatter()
+                formatter: logging.Formatter = StructuredFormatter()
             
             handler.setFormatter(formatter)
             handler.setLevel(logging.DEBUG)  # Alle Logs in Datei
@@ -225,11 +244,11 @@ class LoggerManager:
             return None
     
     def _create_error_handler(self) -> Optional[logging.Handler]:
-        """Error-Handler für separate Error-Logs erstellen"""
+        """Erstellt und konfiguriert einen Error-Handler für separate Error-Logs."""
         try:
-            error_file = self.settings.get_logs_path() / 'errors.log'
+            error_file: Path = self.settings.get_logs_path() / 'errors.log'
             
-            handler = logging.handlers.RotatingFileHandler(
+            handler: logging.Handler = logging.handlers.RotatingFileHandler(
                 filename=error_file,
                 maxBytes=self.settings.LOG_FILE_MAX_SIZE_MB * 1024 * 1024,
                 backupCount=self.settings.LOG_FILE_BACKUP_COUNT,
@@ -240,7 +259,7 @@ class LoggerManager:
             handler.setLevel(logging.ERROR)
             
             # Detaillierter Formatter für Errors
-            formatter = logging.Formatter(
+            formatter: logging.Formatter = logging.Formatter(
                 fmt='%(asctime)s - %(name)s - %(levelname)s - %(module)s:%(lineno)d\n'
                     'Function: %(funcName)s\n'
                     'Message: %(message)s\n'
@@ -257,11 +276,11 @@ class LoggerManager:
             return None
     
     def _create_performance_handler(self) -> Optional[logging.Handler]:
-        """Performance-Handler erstellen"""
+        """Erstellt und konfiguriert einen Performance-Handler."""
         try:
-            perf_file = self.settings.get_logs_path() / 'performance.log'
+            perf_file: Path = self.settings.get_logs_path() / 'performance.log'
             
-            handler = logging.handlers.RotatingFileHandler(
+            handler: logging.Handler = logging.handlers.RotatingFileHandler(
                 filename=perf_file,
                 maxBytes=50 * 1024 * 1024,  # 50MB
                 backupCount=3,
@@ -269,7 +288,7 @@ class LoggerManager:
             )
             
             # Performance-spezifischer Formatter
-            formatter = logging.Formatter(
+            formatter: logging.Formatter = logging.Formatter(
                 fmt='%(asctime)s - %(name)s - %(message)s',
                 datefmt='%Y-%m-%d %H:%M:%S'
             )
@@ -286,48 +305,48 @@ class LoggerManager:
             print(f"Failed to create performance handler: {e}")
             return None
     
-    def _configure_external_loggers(self):
-        """Externe Logger konfigurieren"""
+    def _configure_external_loggers(self) -> None:
+        """Konfiguriert Log-Level für externe Bibliotheken."""
         # SQLAlchemy Logger
-        sqlalchemy_logger = logging.getLogger('sqlalchemy')
+        sqlalchemy_logger: logging.Logger = logging.getLogger('sqlalchemy')
         if self.settings.DATABASE_ECHO:
             sqlalchemy_logger.setLevel(logging.INFO)
         else:
             sqlalchemy_logger.setLevel(logging.WARNING)
         
         # FastAPI Logger
-        fastapi_logger = logging.getLogger('fastapi')
+        fastapi_logger: logging.Logger = logging.getLogger('fastapi')
         fastapi_logger.setLevel(logging.INFO)
         
         # Uvicorn Logger
-        uvicorn_logger = logging.getLogger('uvicorn')
+        uvicorn_logger: logging.Logger = logging.getLogger('uvicorn')
         uvicorn_logger.setLevel(logging.INFO)
         
         # Transformers Logger (für CLAP)
-        transformers_logger = logging.getLogger('transformers')
+        transformers_logger: logging.Logger = logging.getLogger('transformers')
         transformers_logger.setLevel(logging.WARNING)
         
         # Librosa Logger
-        librosa_logger = logging.getLogger('librosa')
+        librosa_logger: logging.Logger = logging.getLogger('librosa')
         librosa_logger.setLevel(logging.WARNING)
     
     def get_logger(self, name: str) -> logging.Logger:
-        """Logger für spezifischen Namen abrufen"""
+        """Gibt einen Logger für den angegebenen Namen zurück."""
         if name not in self._loggers:
-            logger = logging.getLogger(name)
+            logger: logging.Logger = logging.getLogger(name)
             self._loggers[name] = logger
         
         return self._loggers[name]
     
-    def log_performance(self, operation: str, duration: float, **kwargs):
-        """Performance-Metrik loggen"""
+    def log_performance(self, operation: str, duration: float, **kwargs: Any) -> None:
+        """Loggt Performance-Metriken als strukturierten JSON-Eintrag."""
         if not self.settings.PERFORMANCE_TRACKING:
             return
         
-        perf_logger = self.get_logger('performance')
+        perf_logger: logging.Logger = self.get_logger('performance')
         
         # Performance-Daten strukturieren
-        perf_data = {
+        perf_data: Dict[str, Any] = {
             'operation': operation,
             'duration_seconds': duration,
             'timestamp': datetime.utcnow().isoformat(),
@@ -338,15 +357,15 @@ class LoggerManager:
         import json
         perf_logger.info(json.dumps(perf_data, ensure_ascii=False))
     
-    def log_system_metrics(self, metrics: Dict[str, Any]):
-        """System-Metriken loggen"""
+    def log_system_metrics(self, metrics: Dict[str, Any]) -> None:
+        """Loggt System-Metriken als strukturierten JSON-Eintrag."""
         if not self.settings.ENABLE_METRICS:
             return
         
-        metrics_logger = self.get_logger('system_metrics')
+        metrics_logger: logging.Logger = self.get_logger('system_metrics')
         
         # Metriken mit Timestamp
-        metrics_data = {
+        metrics_data: Dict[str, Any] = {
             'timestamp': datetime.utcnow().isoformat(),
             'metrics': metrics
         }
@@ -355,12 +374,13 @@ class LoggerManager:
         metrics_logger.info(json.dumps(metrics_data, ensure_ascii=False))
 
 
+
 # Globaler Logger-Manager
 _logger_manager: Optional[LoggerManager] = None
 
 
 def get_logger_manager() -> LoggerManager:
-    """Logger-Manager-Instanz abrufen"""
+    """Gibt die Singleton-Instanz des Logger-Managers zurück."""
     global _logger_manager
     if _logger_manager is None:
         _logger_manager = LoggerManager(settings)
@@ -370,13 +390,13 @@ def get_logger_manager() -> LoggerManager:
 
 @lru_cache(maxsize=128)
 def get_logger(name: str) -> logging.Logger:
-    """Logger für spezifischen Namen abrufen (gecacht)"""
-    manager = get_logger_manager()
+    """Gibt einen Logger für den angegebenen Namen zurück (gecacht)."""
+    manager: LoggerManager = get_logger_manager()
     return manager.get_logger(name)
 
 
-def setup_logging(settings_obj=None):
-    """Logging-System initialisieren"""
+def setup_logging(settings_obj=None) -> None:
+    """Initialisiert das Logging-System mit optionalen Einstellungen."""
     global _logger_manager
     if settings_obj is None:
         settings_obj = settings
@@ -384,36 +404,39 @@ def setup_logging(settings_obj=None):
     _logger_manager.setup_logging()
 
 
-def log_performance(operation: str, duration: float, **kwargs):
-    """Performance-Metrik loggen"""
-    manager = get_logger_manager()
+def log_performance(operation: str, duration: float, **kwargs: Any) -> None:
+    """Loggt Performance-Metriken über den Logger-Manager."""
+    manager: LoggerManager = get_logger_manager()
     manager.log_performance(operation, duration, **kwargs)
 
 
-def log_system_metrics(metrics: Dict[str, Any]):
-    """System-Metriken loggen"""
-    manager = get_logger_manager()
+def log_system_metrics(metrics: Dict[str, Any]) -> None:
+    """Loggt System-Metriken über den Logger-Manager."""
+    manager: LoggerManager = get_logger_manager()
     manager.log_system_metrics(metrics)
 
 
 # Context Manager für Performance-Logging
 class PerformanceLogger:
-    """Context Manager für automatisches Performance-Logging"""
+    """Context Manager für automatisches Performance-Logging.
+
+    Misst die Ausführungszeit eines Code-Blocks und loggt das Ergebnis.
+    """
     
-    def __init__(self, operation: str, logger_name: str = None, **kwargs):
-        self.operation = operation
-        self.logger = get_logger(logger_name or 'performance')
-        self.kwargs = kwargs
-        self.start_time = None
+    def __init__(self, operation: str, logger_name: Optional[str] = None, **kwargs: Any):
+        self.operation: str = operation
+        self.logger: logging.Logger = get_logger(logger_name or 'performance')
+        self.kwargs: Dict[str, Any] = kwargs
+        self.start_time: Optional[datetime] = None
     
-    def __enter__(self):
+    def __enter__(self) -> 'PerformanceLogger':
         self.start_time = datetime.utcnow()
         self.logger.debug(f"Starting operation: {self.operation}")
         return self
     
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type: Optional[type], exc_val: Optional[BaseException], exc_tb: Optional[Any]) -> None:
         if self.start_time:
-            duration = (datetime.utcnow() - self.start_time).total_seconds()
+            duration: float = (datetime.utcnow() - self.start_time).total_seconds()
             
             if exc_type is None:
                 # Erfolgreiche Operation
@@ -431,14 +454,14 @@ class PerformanceLogger:
 
 
 # Decorator für automatisches Performance-Logging
-def log_performance_decorator(operation: str = None, logger_name: str = None):
-    """Decorator für automatisches Performance-Logging"""
-    def decorator(func):
+def log_performance_decorator(operation: Optional[str] = None, logger_name: Optional[str] = None):
+    """Decorator für automatisches Performance-Logging von Funktionen."""
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         import functools
         
         @functools.wraps(func)
-        def wrapper(*args, **kwargs):
-            op_name = operation or f"{func.__module__}.{func.__name__}"
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            op_name: str = operation or f"{func.__module__}.{func.__name__}"
             
             with PerformanceLogger(op_name, logger_name):
                 return func(*args, **kwargs)
@@ -449,9 +472,9 @@ def log_performance_decorator(operation: str = None, logger_name: str = None):
 
 # Hilfsfunktionen für strukturiertes Logging
 def log_audio_processing(logger: logging.Logger, file_path: str, operation: str, 
-                        duration: float = None, **kwargs):
-    """Audio-Verarbeitung loggen"""
-    extra_data = {
+                        duration: Optional[float] = None, **kwargs: Any) -> None:
+    """Loggt Audio-Verarbeitungsereignisse mit strukturierten Daten."""
+    extra_data: Dict[str, Any] = {
         'file_path': file_path,
         'operation': operation,
         'category': 'audio_processing',
@@ -465,9 +488,9 @@ def log_audio_processing(logger: logging.Logger, file_path: str, operation: str,
 
 
 def log_api_request(logger: logging.Logger, method: str, endpoint: str, 
-                   status_code: int, duration: float, **kwargs):
-    """API-Request loggen"""
-    extra_data = {
+                   status_code: int, duration: float, **kwargs: Any) -> None:
+    """Loggt API-Anfragen mit strukturierten Daten."""
+    extra_data: Dict[str, Any] = {
         'method': method,
         'endpoint': endpoint,
         'status_code': status_code,
@@ -480,9 +503,9 @@ def log_api_request(logger: logging.Logger, method: str, endpoint: str,
 
 
 def log_database_operation(logger: logging.Logger, operation: str, table: str, 
-                          duration: float = None, **kwargs):
-    """Datenbank-Operation loggen"""
-    extra_data = {
+                          duration: Optional[float] = None, **kwargs: Any) -> None:
+    """Loggt Datenbank-Operationen mit strukturierten Daten."""
+    extra_data: Dict[str, Any] = {
         'operation': operation,
         'table': table,
         'category': 'database',
@@ -496,8 +519,8 @@ def log_database_operation(logger: logging.Logger, operation: str, table: str,
 
 
 # Logging für Entwicklung vs. Produktion
-def configure_for_environment(environment: str = "development"):
-    """Logging für spezifische Umgebung konfigurieren"""
+def configure_for_environment(environment: str = "development") -> None:
+    """Konfiguriert das Logging-System basierend auf der Umgebung (development, production, testing)."""
     if environment == "development":
         # Mehr Details für Entwicklung
         logging.getLogger().setLevel(logging.DEBUG)

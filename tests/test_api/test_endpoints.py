@@ -8,7 +8,7 @@ import tempfile
 from pathlib import Path
 import io
 
-from src.api.main import app
+from src.main import app
 from src.core.config import Settings
 
 

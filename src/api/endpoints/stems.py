@@ -1,20 +1,33 @@
+"""API-Endpunkte für die Verwaltung und Suche von Audio-Stems.
+
+Definiert Routen für das Abrufen, Suchen und Generieren von Tracks
+basierend auf Audio-Stems.
+"""
+
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 from ...db.database import get_db
 from ...db import crud
 from ...schemas.stem import Stem, StemList, SearchResult
-from ...services.search import search_service
+from ...services.search import SearchService
 from ...services.arranger import ArrangerService
 from ...services.renderer import RendererService
 from ...core.logging import get_logger
+from ...core.config import settings
 
 logger = get_logger(__name__)
 
-# Service-Instanzen
-arranger_service = ArrangerService()
-renderer_service = RendererService()
+# Dependency-Funktionen für Services
+def get_search_service() -> SearchService:
+    return SearchService()
+
+def get_arranger_service() -> ArrangerService:
+    return ArrangerService(settings=settings) # Annahme: ArrangerService benötigt Settings
+
+def get_renderer_service() -> RendererService:
+    return RendererService(settings=settings) # Annahme: RendererService benötigt Settings
 
 
 class TrackGenerationRequest(BaseModel):
@@ -75,7 +88,8 @@ def search_stems(
     prompt: str = Query(..., description="Search query text"),
     top_k: int = Query(5, ge=1, le=50, description="Number of results to return"),
     category: Optional[str] = Query(None, description="Filter by category"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    search_service: SearchService = Depends(get_search_service)
 ):
     """Search stems using semantic similarity"""
     try:
@@ -91,7 +105,14 @@ def search_stems(
 
 
 @router.post("/generate-track")
-async def generate_track(request: TrackGenerationRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+async def generate_track(
+    request: TrackGenerationRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    search_service: SearchService = Depends(get_search_service),
+    arranger_service: ArrangerService = Depends(get_arranger_service),
+    renderer_service: RendererService = Depends(get_renderer_service)
+):
     """
     Generiert einen vollständigen Track basierend auf einem Prompt
     

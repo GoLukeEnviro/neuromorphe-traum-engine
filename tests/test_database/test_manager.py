@@ -8,8 +8,8 @@ from pathlib import Path
 import tempfile
 import sqlite3
 
-from src.database.manager import DatabaseManager
-from src.database.models import Stem, Arrangement, RenderJob
+from src.database.database import DatabaseManager
+from src.database.models import Stem, GeneratedTrack, ProcessingJob
 from src.core.config import Settings
 
 
@@ -312,11 +312,11 @@ class TestArrangementOperations:
     @pytest.mark.unit
     async def test_create_arrangement(self, db_manager: DatabaseManager):
         """Test: Arrangement erstellen"""
-        arrangement_data = {
+        track_data = {
             "prompt": "Dark techno with heavy bass",
             "duration": 180,
             "genre": "techno",
-            "structure": {
+            "track_structure": {
                 "sections": [
                     {"name": "intro", "start": 0, "duration": 32, "stems": [1, 2]},
                     {"name": "main", "start": 32, "duration": 96, "stems": [1, 2, 3]},
@@ -332,90 +332,90 @@ class TestArrangementOperations:
             }
         }
         
-        arrangement_id = await db_manager.create_arrangement(arrangement_data)
+        track_id = await db_manager.create_generated_track(track_data)
         
-        assert arrangement_id is not None
-        assert isinstance(arrangement_id, str)
+        assert track_id is not None
+        assert isinstance(track_id, str)
         
-        # Arrangement abrufen und validieren
-        arrangement = await db_manager.get_arrangement(arrangement_id)
-        assert arrangement is not None
-        assert arrangement["prompt"] == "Dark techno with heavy bass"
-        assert arrangement["duration"] == 180
-        assert len(arrangement["structure"]["sections"]) == 3
+        # GeneratedTrack abrufen und validieren
+        track = await db_manager.get_generated_track(track_id)
+        assert track is not None
+        assert track["prompt"] == "Dark techno with heavy bass"
+        assert track["duration"] == 180
+        assert len(track["track_structure"]["sections"]) == 3
     
     @pytest.mark.unit
-    async def test_list_arrangements(self, db_manager: DatabaseManager):
-        """Test: Arrangements auflisten"""
-        # Mehrere Arrangements erstellen
-        arrangements_data = [
+    async def test_list_generated_tracks(self, db_manager: DatabaseManager):
+        """Test: GeneratedTracks auflisten"""
+        # Mehrere GeneratedTracks erstellen
+        tracks_data = [
             {
-                "prompt": "Arrangement 1",
+                "original_prompt": "Track 1",
                 "duration": 120,
-                "structure": {"sections": []},
+                "track_structure": {"sections": []},
                 "stems": []
             },
             {
-                "prompt": "Arrangement 2",
+                "original_prompt": "Track 2",
                 "duration": 180,
-                "structure": {"sections": []},
+                "track_structure": {"sections": []},
                 "stems": []
             },
             {
-                "prompt": "Arrangement 3",
+                "original_prompt": "Track 3",
                 "duration": 240,
-                "structure": {"sections": []},
+                "track_structure": {"sections": []},
                 "stems": []
             }
         ]
         
-        for arrangement_data in arrangements_data:
-            await db_manager.create_arrangement(arrangement_data)
+        for track_data in tracks_data:
+            await db_manager.create_generated_track(track_data)
         
-        # Arrangements auflisten
-        result = await db_manager.list_arrangements(
+        # GeneratedTracks auflisten
+        result = await db_manager.list_generated_tracks(
             page=1,
             per_page=2
         )
         
-        assert "arrangements" in result
+        assert "tracks" in result
         assert "total" in result
         assert "page" in result
         assert "per_page" in result
         
-        assert len(result["arrangements"]) <= 2
+        assert len(result["tracks"]) <= 2
         assert result["total"] >= 3
         assert result["page"] == 1
         assert result["per_page"] == 2
     
     @pytest.mark.unit
-    async def test_update_arrangement(self, db_manager: DatabaseManager):
-        """Test: Arrangement aktualisieren"""
-        # Arrangement erstellen
-        arrangement_data = {
-            "prompt": "Original prompt",
+    async def test_update_generated_track(self, db_manager: DatabaseManager):
+        """Test: GeneratedTrack aktualisieren"""
+        # GeneratedTrack erstellen
+        track_data = {
+            "original_prompt": "Original prompt",
             "duration": 120,
-            "structure": {"sections": []},
+            "track_structure": {"sections": []},
             "stems": []
         }
         
-        arrangement_id = await db_manager.create_arrangement(arrangement_data)
+        track_id = await db_manager.create_generated_track(track_data)
         
-        # Arrangement aktualisieren
+        # GeneratedTrack aktualisieren
         update_data = {
-            "prompt": "Updated prompt",
-            "metadata": {"updated": True}
+            "original_prompt": "Updated prompt",
+            "track_metadata": {"updated": True}
         }
         
-        updated_arrangement = await db_manager.update_arrangement(
-            arrangement_id, 
+        updated_track = await db_manager.update_generated_track(
+            track_id, 
             update_data
         )
         
-        assert updated_arrangement is not None
-        assert updated_arrangement["prompt"] == "Updated prompt"
-        assert updated_arrangement["metadata"]["updated"] == True
-        assert updated_arrangement["duration"] == 120  # Unverändert
+        assert updated_track is not None
+        assert updated_track["original_prompt"] == "Updated prompt"
+        assert updated_track["track_metadata"]["updated"] == True
+        assert updated_track["duration"] == 120  # Unverändert
 
 
 class TestRenderJobOperations:
@@ -424,19 +424,19 @@ class TestRenderJobOperations:
     @pytest.mark.unit
     async def test_create_render_job(self, db_manager: DatabaseManager):
         """Test: Render-Job erstellen"""
-        # Erst ein Arrangement erstellen
-        arrangement_data = {
-            "prompt": "Test arrangement",
+        # Erst ein GeneratedTrack erstellen
+        track_data = {
+            "original_prompt": "Test generated track",
             "duration": 180,
-            "structure": {"sections": []},
+            "track_structure": {"sections": []},
             "stems": []
         }
         
-        arrangement_id = await db_manager.create_arrangement(arrangement_data)
+        track_id = await db_manager.create_generated_track(track_data)
         
         # Render-Job erstellen
         job_data = {
-            "arrangement_id": arrangement_id,
+            "arrangement_id": track_id,
             "format": "wav",
             "quality": "high",
             "options": {
@@ -453,25 +453,25 @@ class TestRenderJobOperations:
         # Job abrufen und validieren
         job = await db_manager.get_render_job(job_id)
         assert job is not None
-        assert job["arrangement_id"] == arrangement_id
+        assert job["arrangement_id"] == track_id
         assert job["format"] == "wav"
         assert job["status"] == "pending"
     
     @pytest.mark.unit
     async def test_update_render_job_status(self, db_manager: DatabaseManager):
         """Test: Render-Job-Status aktualisieren"""
-        # Arrangement und Job erstellen
-        arrangement_data = {
-            "prompt": "Test",
+        # GeneratedTrack und Job erstellen
+        track_data = {
+            "original_prompt": "Test",
             "duration": 60,
-            "structure": {"sections": []},
+            "track_structure": {"sections": []},
             "stems": []
         }
         
-        arrangement_id = await db_manager.create_arrangement(arrangement_data)
+        track_id = await db_manager.create_generated_track(track_data)
         
         job_data = {
-            "arrangement_id": arrangement_id,
+            "arrangement_id": track_id,
             "format": "mp3"
         }
         
@@ -504,20 +504,20 @@ class TestRenderJobOperations:
     @pytest.mark.unit
     async def test_list_render_jobs(self, db_manager: DatabaseManager):
         """Test: Render-Jobs auflisten"""
-        # Arrangement erstellen
-        arrangement_data = {
-            "prompt": "Test",
+        # GeneratedTrack erstellen
+        track_data = {
+            "original_prompt": "Test",
             "duration": 60,
-            "structure": {"sections": []},
+            "track_structure": {"sections": []},
             "stems": []
         }
         
-        arrangement_id = await db_manager.create_arrangement(arrangement_data)
+        track_id = await db_manager.create_generated_track(track_data)
         
         # Mehrere Jobs erstellen
         for i in range(3):
             job_data = {
-                "arrangement_id": arrangement_id,
+                "arrangement_id": track_id,
                 "format": "wav" if i % 2 == 0 else "mp3"
             }
             await db_manager.create_render_job(job_data)

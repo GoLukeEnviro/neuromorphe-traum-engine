@@ -9,13 +9,12 @@ import os
 import sys
 from pathlib import Path
 
-# Add src to path
-sys.path.append(str(Path(__file__).parent / "src"))
 
-from services.separation_service import SeparationService
-from services.training_service import TrainingService
-from services.generative_service import GenerativeService
-from database.service import DatabaseService
+
+from src.services.separation_service import SeparationService
+from src.services.training_service import TrainingService
+from src.services.generative_service import GenerativeService
+from src.database.service import DatabaseService
 
 
 async def test_neuromorphic_engine():

@@ -16,6 +16,7 @@ numpy>=1.24.3
 scipy>=1.11.4
 soundfile>=0.12.1
 pydub>=0.25.1
+sounddevice
 
 # AI/ML Dependencies
 torch>=2.1.1
@@ -27,7 +28,7 @@ demucs>=4.0.1
 
 # Utility Dependencies
 python-dotenv==1.0.0
-typing-extensions==4.8.0
+typing-extensions>=4.12.2
 click==8.1.7
 pydantic-settings==2.10.1
 
