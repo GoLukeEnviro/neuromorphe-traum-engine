@@ -43,6 +43,7 @@ class Stem(Base):
     genre = Column(String(100), nullable=True, index=True)
     mood = Column(String(100), nullable=True, index=True)
     energy_level = Column(String(50), nullable=True, index=True)
+    source = Column(String(20), nullable=False, default="original", index=True)  # original, separated, generated
     
     # Generierte Tags
     auto_tags = Column(SQLiteJSON, nullable=True)  # Liste von automatisch generierten Tags

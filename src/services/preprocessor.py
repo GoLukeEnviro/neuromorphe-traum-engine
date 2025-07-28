@@ -16,13 +16,13 @@ from datetime import datetime
 import librosa
 import numpy as np
 from scipy import signal
-import essentia
-import essentia.standard as es
+# import essentia
+# import essentia.standard as es
 
-from ..db.crud import create_stem, get_stem_by_hash
+from ..db.crud import create_stem, get_stem_by_path
 from ..db.database import get_db
-from ..db.schemas import StemCreate
-from ..config import settings
+from ..schemas.stem import StemCreate
+from ..core.config import settings
 from .neuro_analyzer import NeuroAnalyzer
 
 logger = logging.getLogger(__name__)
@@ -36,13 +36,13 @@ class AudioAnalyzer:
         self.hop_length = 512
         self.frame_length = 2048
         
-        # Essentia-Algorithmen initialisieren
-        self.windowing = es.Windowing(type='hann')
-        self.spectrum = es.Spectrum()
-        self.spectral_peaks = es.SpectralPeaks()
-        self.pitch_detection = es.PitchYinProbabilistic()
-        self.onset_detection = es.OnsetDetection(method='hfc')
-        self.beats_loudness = es.BeatsLoudness()
+        # Essentia-Algorithmen initialisieren (deaktiviert)
+        # self.windowing = es.Windowing(type='hann')
+        # self.spectrum = es.Spectrum()
+        # self.spectral_peaks = es.SpectralPeaks()
+        # self.pitch_detection = es.PitchYinProbabilistic()
+        # self.onset_detection = es.OnsetDetection(method='hfc')
+        # self.beats_loudness = es.BeatsLoudness()
         
         logger.info("AudioAnalyzer initialisiert")
     
@@ -399,7 +399,7 @@ class PreprocessorService:
         self.neuro_analyzer = NeuroAnalyzer()
         
         # Verzeichnisse sicherstellen
-        self.processed_dir = Path(settings.PROCESSED_DATABASE_DIR)
+        self.processed_dir = Path(settings.PROCESSED_DIR)
         self.stems_dir = self.processed_dir / "stems"
         self.quarantine_dir = self.processed_dir / "quarantine"
         

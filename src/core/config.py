@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = "./raw_construction_kits"
     PROCESSED_DIR: str = "./processed_database/stems"
     EMBEDDINGS_DIR: str = "./dataembeddings"
+    GENERATED_TRACKS_DIR: str = "./generated_tracks"
     MAX_FILE_SIZE: int = 100 * 1024 * 1024  # 100MB
     
     # CLAP Model

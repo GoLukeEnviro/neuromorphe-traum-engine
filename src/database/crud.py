@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 
 from .models import (
     Stem, GeneratedTrack, TrackStem, ProcessingJob,
-    SystemMetrics, UserSession, ConfigurationSetting, get_active_jobs_count, get_system_statistics
+    SystemMetrics, UserSession, ConfigurationSetting
 )
 
 logger = logging.getLogger(__name__)

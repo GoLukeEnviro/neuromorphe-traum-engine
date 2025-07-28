@@ -37,7 +37,7 @@ class CLAPEmbedder:
         self.is_loaded = False
         
         # Cache-Verzeichnis
-        self.cache_dir = Path(settings.CLAP_MODEL_CACHE_DIR)
+        self.cache_dir = Path(settings.MODEL_CACHE_DIR)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         
         logger.info(f"CLAPEmbedder initialisiert (Device: {self.device})")

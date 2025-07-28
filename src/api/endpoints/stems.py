@@ -1,10 +1,42 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional
+from pydantic import BaseModel, Field
 from ...db.database import get_db
 from ...db import crud
 from ...schemas.stem import Stem, StemList, SearchResult
 from ...services.search import search_service
+from ...services.arranger import ArrangerService
+from ...services.renderer import RendererService
+from ...core.logging import get_logger
+
+logger = get_logger(__name__)
+
+# Service-Instanzen
+arranger_service = ArrangerService()
+renderer_service = RendererService()
+
+
+class TrackGenerationRequest(BaseModel):
+    """Request für Track-Generierung"""
+    prompt: str = Field(..., description="Beschreibung des gewünschten Tracks")
+    bpm: Optional[int] = Field(None, ge=60, le=200, description="Beats per Minute")
+    duration: Optional[float] = Field(None, ge=10.0, le=300.0, description="Track-Dauer in Sekunden")
+    include_generated: bool = Field(True, description="Generierte Stems einbeziehen")
+    include_separated: bool = Field(True, description="Separierte Stems einbeziehen")
+    include_original: bool = Field(True, description="Originale Stems einbeziehen")
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "prompt": "aggressive industrial techno 140 bpm",
+                "bpm": 140,
+                "duration": 120.0,
+                "include_generated": True,
+                "include_separated": True,
+                "include_original": True
+            }
+        }
 
 router = APIRouter()
 
@@ -56,3 +88,104 @@ def search_stems(
         return results
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
+
+
+@router.post("/generate-track")
+async def generate_track(request: TrackGenerationRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    """
+    Generiert einen vollständigen Track basierend auf einem Prompt
+    
+    Dieser Endpunkt nutzt den ArrangerService und RendererService um einen Track
+    aus verfügbaren Stems zu komponieren. Er kann auf originale, separierte und
+    generierte Stems zugreifen, je nach den Request-Parametern.
+    """
+    try:
+        logger.info(f"Starte Track-Generierung mit Prompt: {request.prompt}")
+        
+        # Verfügbare Stem-Quellen basierend auf Request-Parametern bestimmen
+        allowed_sources = []
+        if request.include_original:
+            allowed_sources.append('original')
+        if request.include_separated:
+            allowed_sources.append('separated')
+        if request.include_generated:
+            allowed_sources.append('generated')
+        
+        if not allowed_sources:
+            raise HTTPException(status_code=400, detail="Mindestens eine Stem-Quelle muss aktiviert sein")
+        
+        # Stems basierend auf Prompt und erlaubten Quellen suchen
+        search_results = search_service.search(
+            db=db,
+            query=request.prompt,
+            top_k=50,  # Mehr Stems für bessere Auswahl
+            category_filter=None
+        )
+        
+        # Stems nach erlaubten Quellen filtern
+        filtered_stems = []
+        for result in search_results:
+            stem = crud.get_stem_by_id(db, result.stem_id)
+            if stem and hasattr(stem, 'source') and stem.source in allowed_sources:
+                filtered_stems.append(stem)
+        
+        if not filtered_stems:
+            raise HTTPException(
+                status_code=404, 
+                detail=f"Keine passenden Stems für Prompt '{request.prompt}' mit den gewählten Quellen gefunden"
+            )
+        
+        logger.info(f"Gefunden: {len(filtered_stems)} passende Stems für Track-Generierung")
+        
+        # Track-Arrangement erstellen
+        arrangement_result = await arranger_service.create_arrangement(
+            stems=filtered_stems,
+            prompt=request.prompt,
+            target_bpm=request.bpm,
+            target_duration=request.duration
+        )
+        
+        if not arrangement_result['success']:
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Arrangement-Erstellung fehlgeschlagen: {arrangement_result.get('error', 'Unbekannter Fehler')}"
+            )
+        
+        # Track rendern
+        render_result = await renderer_service.render_track(
+            arrangement=arrangement_result['arrangement'],
+            output_format='wav',
+            quality='high'
+        )
+        
+        if not render_result['success']:
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Track-Rendering fehlgeschlagen: {render_result.get('error', 'Unbekannter Fehler')}"
+            )
+        
+        # Erfolgreiche Antwort
+        return {
+            'success': True,
+            'message': f'Track erfolgreich generiert: {render_result["output_path"]}',
+            'prompt': request.prompt,
+            'track_info': {
+                'output_path': render_result['output_path'],
+                'duration': render_result.get('duration'),
+                'bpm': arrangement_result.get('detected_bpm') or request.bpm,
+                'stems_used': len(arrangement_result['arrangement']['stems']),
+                'stem_sources': {
+                    'original': sum(1 for s in filtered_stems if getattr(s, 'source', '') == 'original'),
+                    'separated': sum(1 for s in filtered_stems if getattr(s, 'source', '') == 'separated'),
+                    'generated': sum(1 for s in filtered_stems if getattr(s, 'source', '') == 'generated')
+                }
+            },
+            'arrangement_details': arrangement_result.get('arrangement_details'),
+            'render_details': render_result.get('render_details')
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Fehler bei Track-Generierung: {e}")
+        raise HTTPException(status_code=500, detail=f"Track-Generierung fehlgeschlagen: {str(e)}")

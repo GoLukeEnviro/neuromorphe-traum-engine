@@ -18,12 +18,13 @@ import soundfile as sf
 import numpy as np
 from pydub import AudioSegment
 from pydub.effects import normalize, compress_dynamic_range
+from sqlalchemy.orm import Session
 
-from ..db.crud import get_stem_by_id, search_stems_by_tags_and_category
+from ..database.crud import StemCRUD
 from ..db.database import get_db
-from ..db.models import GeneratedTrack
+from ..database.models import GeneratedTrack
 from .arranger import ArrangementPlan, ArrangementSection, StemQuery
-from ..config import settings
+from ..core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -322,7 +323,7 @@ class RendererService:
             for query in section.stem_queries:
                 try:
                     # Suche passende Stems
-                    stems = await search_stems_by_tags_and_category(
+                    stems = await StemCRUD.search_stems_by_tags_and_category(
                         db=db,
                         category=query.category,
                         tags=query.tags,

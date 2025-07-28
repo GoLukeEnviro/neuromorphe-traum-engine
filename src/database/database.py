@@ -20,8 +20,8 @@ from sqlalchemy.pool import StaticPool
 from sqlalchemy.exc import SQLAlchemyError
 import aiosqlite
 
-from core.config import settings
-from core.logging import get_logger, log_database_operation, PerformanceLogger
+from ..core.config import settings
+from ..core.logging import get_logger
 from .models import Base
 
 # Settings und Logger

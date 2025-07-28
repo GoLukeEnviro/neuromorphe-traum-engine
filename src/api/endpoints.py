@@ -32,7 +32,7 @@ from ..services.preprocessor import PreprocessorService
 from ..services.arranger import ArrangerService
 from ..services.renderer import RendererService
 from ..services.neuro_analyzer import NeuroAnalyzer
-from ..core.config import get_settings
+from ..core.config import settings
 from ..core.logging import get_logger
 
 # Router-Instanzen
@@ -43,7 +43,6 @@ job_router = APIRouter(prefix="/jobs", tags=["jobs"])
 system_router = APIRouter(prefix="/system", tags=["system"])
 
 # Services und Konfiguration
-settings = get_settings()
 logger = get_logger(__name__)
 
 # Service-Instanzen (werden bei Bedarf initialisiert)
