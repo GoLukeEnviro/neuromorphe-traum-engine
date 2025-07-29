@@ -5,7 +5,9 @@ from datetime import datetime, timedelta
 from uuid import uuid4
 import json
 
-from src.database.models import (
+from database.database import get_async_db_session
+
+from database.models import (
     Stem, GeneratedTrack, ProcessingJob, 
     RenderStatus, RenderFormat
 )

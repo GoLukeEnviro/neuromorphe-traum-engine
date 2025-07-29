@@ -10,8 +10,8 @@ from typing import Dict, List, Optional, Any
 from dataclasses import dataclass
 from enum import Enum
 
-from ..database.service import DatabaseService
-from ..database.models import Stem
+from database.service import DatabaseService
+from database.models import Stem
 
 logger = logging.getLogger(__name__)
 

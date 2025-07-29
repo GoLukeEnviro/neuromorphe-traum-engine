@@ -1,4 +1,4 @@
-from pydantic import Field, ConfigDict, field_validator
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 from typing import Any, Optional, List, Dict, Union
 from enum import Enum
 

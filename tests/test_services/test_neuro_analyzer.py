@@ -5,8 +5,8 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 from pathlib import Path
 
-from src.services.neuro_analyzer import NeuroAnalyzer
-from src.core.config import Settings
+from services.neuro_analyzer import NeuroAnalyzer
+from core.config import Settings
 
 
 class TestNeuroAnalyzer:
@@ -15,7 +15,7 @@ class TestNeuroAnalyzer:
     @pytest.fixture
     def analyzer(self) -> NeuroAnalyzer:
         """NeuroAnalyzer-Instanz für Tests"""
-        with patch('src.services.neuro_analyzer.SemanticAnalyzer') as mock_semantic, patch('src.services.neuro_analyzer.PatternAnalyzer') as mock_pattern:
+        with patch('services.neuro_analyzer.SemanticAnalyzer') as mock_semantic, patch('services.neuro_analyzer.PatternAnalyzer') as mock_pattern:
             analyzer = NeuroAnalyzer()
             analyzer.semantic_analyzer = mock_semantic.return_value
             analyzer.pattern_analyzer = mock_pattern.return_value
@@ -24,8 +24,8 @@ class TestNeuroAnalyzer:
     @pytest.mark.unit
     def test_initialization(self):
         """Test: NeuroAnalyzer-Initialisierung"""
-        with patch('src.services.neuro_analyzer.SemanticAnalyzer') as mock_semantic, \
-             patch('src.services.neuro_analyzer.PatternAnalyzer') as mock_pattern:
+        with patch('services.neuro_analyzer.SemanticAnalyzer') as mock_semantic, \
+             patch('services.neuro_analyzer.PatternAnalyzer') as mock_pattern:
             
             analyzer = NeuroAnalyzer()
             

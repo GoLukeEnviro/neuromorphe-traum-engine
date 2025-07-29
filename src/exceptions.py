@@ -36,6 +36,46 @@ class DatabaseError(NeuromorpheError):
         super().__init__(message, code=5001, **kwargs)
 
 
+class FileNotFoundError(NeuromorpheError):
+    """Ausnahme, wenn eine Datei nicht gefunden wurde.
+    """
+
+    def __init__(self, message: str = "File not found", **kwargs):
+        super().__init__(message, code=4005, **kwargs)
+
+
+class InsufficientResourcesError(NeuromorpheError):
+    """Ausnahme für unzureichende Ressourcen.
+    """
+
+    def __init__(self, message: str = "Insufficient resources", **kwargs):
+        super().__init__(message, code=5009, **kwargs)
+
+
+class TimeoutError(NeuromorpheError):
+    """Ausnahme für Zeitüberschreitungen bei Operationen.
+    """
+
+    def __init__(self, message: str = "Operation timed out", **kwargs):
+        super().__init__(message, code=4006, **kwargs)
+
+
+class RateLimitError(NeuromorpheError):
+    """Ausnahme für Überschreitung der Ratenbegrenzung.
+    """
+
+    def __init__(self, message: str = "Rate limit exceeded", **kwargs):
+        super().__init__(message, code=4007, **kwargs)
+
+
+class ExternalServiceError(NeuromorpheError):
+    """Ausnahme für Fehler bei der Kommunikation mit externen Diensten.
+    """
+
+    def __init__(self, message: str = "External service error", **kwargs):
+        super().__init__(message, code=5000, **kwargs)
+
+
 class NotFoundError(NeuromorpheError):
     """Ausnahme, wenn eine Ressource nicht gefunden wurde.
     """
@@ -76,6 +116,14 @@ class RenderingError(NeuromorpheError):
         super().__init__(message, code=5004, **kwargs)
 
 
+class APIError(NeuromorpheError):
+    """Ausnahme für Fehler in der API-Schicht.
+    """
+
+    def __init__(self, message: str = "API error", **kwargs):
+        super().__init__(message, code=5008, **kwargs)
+
+
 class ExternalAPIError(NeuromorpheError):
     """Ausnahme für Fehler bei der Kommunikation mit externen APIs.
     """
@@ -92,12 +140,28 @@ class AuthenticationError(NeuromorpheError):
         super().__init__(message, code=4001, **kwargs)
 
 
+class InsufficientResourcesError(NeuromorpheError):
+    """Ausnahme für unzureichende Ressourcen.
+    """
+
+    def __init__(self, message: str = "Insufficient resources", **kwargs):
+        super().__init__(message, code=5009, **kwargs)
+
+
 class AuthorizationError(NeuromorpheError):
     """Ausnahme für Autorisierungsfehler.
     """
 
     def __init__(self, message: str = "Authorization failed", **kwargs):
         super().__init__(message, code=4003, **kwargs)
+
+
+class CLAPModelError(NeuromorpheError):
+    """Ausnahme für Fehler im CLAP-Modell.
+    """
+
+    def __init__(self, message: str = "CLAP model error", **kwargs):
+        super().__init__(message, code=5007, **kwargs)
 
 
 class ConfigurationError(NeuromorpheError):

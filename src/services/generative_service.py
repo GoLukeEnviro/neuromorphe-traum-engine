@@ -22,10 +22,10 @@ import numpy as np
 from sklearn.preprocessing import StandardScaler
 from scipy.signal import istft
 
-from ..core.config import settings
-from ..core.logging import get_logger
-from ..database.service import DatabaseService
-from .training_service import AudioVAE
+from core.config import settings
+from core.logging import get_logger
+from database.service import DatabaseService
+from services.training_service import AudioVAE
 logger = get_logger(__name__)
 
 

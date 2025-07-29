@@ -1,9 +1,10 @@
 """Pytest-Konfiguration und gemeinsame Fixtures für Tests"""
 
+import sys
+from pathlib import Path
 import asyncio
 import os
 import tempfile
-from pathlib import Path
 from typing import AsyncGenerator, Generator, List
 from unittest.mock import MagicMock, patch, patch
 
@@ -14,16 +15,23 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
+# Add project root to Python path
+root_dir = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(root_dir))
+
+# Add src directory to Python path
+sys.path.insert(0, str(root_dir / "src"))
+
 # Test-spezifische Imports
-from src.core.config import Settings
-from src.database.database import get_async_db_session, get_db
-from src.database.crud import create_tables
-from src.database.models import Base
-from src.main import app
-from src.services.arranger import ArrangerService
-from src.services.neuro_analyzer import NeuroAnalyzer
-from src.services.preprocessor import PreprocessorService
-from src.services.renderer import RendererService
+from core.config import Settings
+from database.database import get_async_db_session
+from database.database import create_tables
+from database.models import Base
+from main import app
+from services.arranger import ArrangerService
+from services.neuro_analyzer import NeuroAnalyzer
+from services.preprocessor import PreprocessorService
+from services.renderer import RendererService
 
 
 @pytest.fixture(scope="session")

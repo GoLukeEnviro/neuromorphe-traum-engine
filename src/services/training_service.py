@@ -24,9 +24,9 @@ import numpy as np
 from sklearn.preprocessing import StandardScaler
 from tqdm import tqdm
 
-from ..core.config import settings
-from ..core.logging import get_logger
-from ..database.service import DatabaseService
+from core.config import settings
+from core.logging import get_logger
+from database.service import DatabaseService
 
 logger = get_logger(__name__)
 

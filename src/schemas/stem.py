@@ -5,6 +5,51 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 
 
+class StemBase(BaseModel):
+    """Basis-Schema für ein Audio-Stem."""
+    filename: str
+    title: Optional[str] = None
+    genre: Optional[str] = None
+    bpm: Optional[float] = None
+    key: Optional[str] = None
+    duration: Optional[float] = None
+    file_size: Optional[int] = None
+    sample_rate: Optional[int] = None
+    bit_depth: Optional[int] = None
+    channels: Optional[int] = None
+    auto_tags: List[str] = []
+    manual_tags: List[str] = []
+    semantic_analysis: Optional[Dict[str, Any]] = None
+
+
+class StemMetadata(BaseModel):
+    """Schema für Metadaten eines Stems."""
+    bpm: Optional[float] = None
+    key: Optional[str] = None
+    time_signature: Optional[str] = None
+    genre: Optional[str] = None
+    mood: Optional[str] = None
+    category: Optional[str] = None
+    energy_level: Optional[str] = None
+    source: str
+    auto_tags: Optional[List[str]] = None
+    manual_tags: Optional[List[str]] = None
+
+
+class StemFeatures(BaseModel):
+    """Schema für extrahierte Features eines Stems."""
+    audio_embedding: Optional[List[float]] = None
+    semantic_analysis: Optional[Dict[str, Any]] = None
+    pattern_analysis: Optional[Dict[str, Any]] = None
+    neural_features: Optional[Dict[str, Any]] = None
+    perceptual_mapping: Optional[Dict[str, Any]] = None
+    harmonic_complexity: Optional[float] = None
+    rhythmic_complexity: Optional[float] = None
+    quality_score: Optional[float] = None
+    complexity_level: Optional[str] = None
+    recommended_usage: Optional[List[str]] = None
+
+
 class SearchResult(BaseModel):
     """Ergebnis einer semantischen Suche nach Audio-Stems."""
     
@@ -157,6 +202,13 @@ class StemCreate(BaseModel):
     processing_error: Optional[str] = None
     processed_path: Optional[str] = None
     processed_at: Optional[datetime] = None
+
+
+class StemSimilarity(BaseModel):
+    """Schema für die Ähnlichkeit von Stems."""
+    stem_id_1: int
+    stem_id_2: int
+    similarity_score: float = Field(..., ge=0.0, le=1.0)
 
 
 class StemUpdate(BaseModel):

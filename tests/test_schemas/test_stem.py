@@ -8,10 +8,10 @@ from unittest.mock import MagicMock
 from pydantic import ValidationError
 
 
-from src.schemas.schemas import (
+from schemas.stem import (
     StemBase, StemCreate, StemUpdate, StemResponse,
-    StemSearch, StemMetadata, StemFeatures,
-    StemAnalysis, StemSimilarity, StemBatch
+    StemSearchRequest, StemMetadata, StemFeatures,
+    StemAnalysisRequest, StemSimilarity, StemBatchResponse
 )
 
 

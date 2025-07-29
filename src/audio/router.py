@@ -12,7 +12,7 @@ from .schemas import (
     ProcessingStatus
 )
 
-router = APIRouter(prefix="/audio", tags=["audio"])
+router = APIRouter(prefix="", tags=["audio"])
 
 
 @router.post("/upload", response_model=AudioProcessingResponse)

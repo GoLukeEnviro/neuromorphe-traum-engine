@@ -19,8 +19,8 @@ from demucs.pretrained import get_model
 from demucs.apply import apply_model
 from demucs.audio import save_audio
 
-from src.core.config import settings
-from src.core.logging import get_logger
+from core.config import settings
+from core.logging import get_logger
 logger = get_logger(__name__)
 
 

@@ -8,8 +8,8 @@ from pathlib import Path
 import tempfile
 import sqlite3
 
-from src.database.database import DatabaseManager
-from src.database.models import Stem, GeneratedTrack, ProcessingJob
+from database.database import DatabaseManager
+from database.models import Stem, GeneratedTrack, ProcessingJob
 from src.core.config import Settings
 
 

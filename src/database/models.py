@@ -47,7 +47,7 @@ class Stem(Base):
     file_size = Column(Integer, nullable=False)
     
     # Musiktheorie-Tags
-    key = Column(String(10), nullable=True, index=True)
+    musical_key = Column(String(10), nullable=True, index=True)
     bpm = Column(Float, nullable=True, index=True)
     time_signature = Column(String(10), nullable=True)
     
@@ -93,7 +93,7 @@ class Stem(Base):
     # Indizes für bessere Performance
     __table_args__ = (
         Index('idx_stem_search', 'category', 'genre', 'mood', 'energy_level'),
-        Index('idx_stem_music', 'key', 'bpm', 'time_signature'),
+        Index('idx_stem_music', 'musical_key', 'bpm', 'time_signature'),
         Index('idx_stem_quality', 'quality_score', 'complexity_level'),
         Index('idx_stem_processing', 'processing_status', 'created_at'),
     )

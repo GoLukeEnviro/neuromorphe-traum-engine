@@ -15,15 +15,15 @@ import tempfile
 from pathlib import Path
 import logging
 
-from ...services.separation_service import SeparationService
-from ...services.training_service import TrainingService
-from ...services.generative_service import GenerativeService
-from ...services.preprocessor import PreprocessorService
-from ...services.renderer import RendererService
-from ...core.logging import get_logger
-from ...core.config import settings
-from ...database.crud import ProcessingJobCRUD
-from ...database.database import get_db
+from services.separation_service import SeparationService
+from services.training_service import TrainingService
+from services.generative_service import GenerativeService
+from services.preprocessor import PreprocessorService
+from services.renderer import RendererService
+from core.logging import get_logger
+from core.config import settings
+from database.crud import ProcessingJobCRUD
+from database.database import get_db
 from sqlalchemy.orm import Session
 
 logger = get_logger(__name__)

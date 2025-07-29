@@ -20,9 +20,9 @@ from sqlalchemy.pool import StaticPool
 from sqlalchemy.exc import SQLAlchemyError
 import aiosqlite
 
-from ..core.config import settings, Settings
-from ..core.logging import get_logger
-from .models import Base
+from core.config import settings, Settings
+from core.logging import get_logger
+from database.models import Base
 
 
 async def create_tables(engine: AsyncEngine):

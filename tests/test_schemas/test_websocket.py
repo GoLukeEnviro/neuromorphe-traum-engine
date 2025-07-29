@@ -4,7 +4,7 @@ import pytest
 from pydantic import ValidationError
 from typing import Any
 
-from src.schemas.schemas import (
+from schemas.websocket import (
     WebSocketMessage, WebSocketResponse, ConnectionMessage, DisconnectionMessage,
     ErrorMessage, RenderProgressMessage, AnalysisProgressMessage, SystemStatusMessage,
     NotificationMessage, BroadcastMessage, PrivateMessage, SubscriptionMessage,

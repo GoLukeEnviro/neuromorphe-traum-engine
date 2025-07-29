@@ -19,11 +19,11 @@ from scipy import signal
 # import essentia
 # import essentia.standard as es
 
-from ..schemas.stem import StemCreate
-from ..core.config import settings
-from .neuro_analyzer import NeuroAnalyzer
-from ..database.service import DatabaseService
-from ..database.models import Stem
+from schemas.stem import StemCreate
+from core.config import settings
+from services.neuro_analyzer import NeuroAnalyzer
+from database.service import DatabaseService
+from database.models import Stem
 
 logger = logging.getLogger(__name__)
 

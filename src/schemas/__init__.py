@@ -4,7 +4,7 @@ from .schemas import *
 from .stem import *
 from .base import TimestampMixin
 from .api import SearchRequest
-from .arrangement import ArrangementAnalysis
+
 from .render import RenderOutput
 from .websocket import ClientInfo
 
@@ -14,7 +14,7 @@ __all__ = [
     # From api.py
     "SearchRequest",
     # From arrangement.py
-    "ArrangementAnalysis",
+
     # From render.py
     "RenderOutput",
     # From websocket.py

@@ -12,8 +12,8 @@ import numpy as np
 import soundfile as sf
 from datetime import datetime
 
-from ..database.service import DatabaseService
-from ..core.config import settings
+from database.service import DatabaseService
+from core.config import settings
 
 logger = logging.getLogger(__name__)
 

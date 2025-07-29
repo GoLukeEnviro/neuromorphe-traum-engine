@@ -5,9 +5,9 @@ from sqlalchemy.orm import Session
 from laion_clap import CLAP_Module
 import json
 
-from ..database.service import DatabaseService
-from ..schemas.stem import SearchResult
-from ..database.models import Stem
+from database.service import DatabaseService
+from schemas.stem import SearchResult
+from database.models import Stem
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

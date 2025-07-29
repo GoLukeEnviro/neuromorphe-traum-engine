@@ -7,15 +7,15 @@ basierend auf Audio-Stems.
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field, ConfigDict
-from ...database.database import get_database_manager
-from ...database.service import DatabaseService
-from ...database.models import Stem
-from ...schemas.schemas import StemList, SearchResult, StemResponse
-from ...services.search import SearchService
-from ...services.arranger import ArrangerService
-from ...services.renderer import RendererService
-from ...core.logging import get_logger
-from ...core.config import settings
+from database.database import get_database_manager
+from database.service import DatabaseService
+from database.models import Stem
+from schemas.stem import StemBatchResponse, SearchResult, StemResponse
+from services.search import SearchService
+from services.arranger import ArrangerService
+from services.renderer import RendererService
+from core.logging import get_logger
+from core.config import settings
 
 logger = get_logger(__name__)
 

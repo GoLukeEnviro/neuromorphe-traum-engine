@@ -6,17 +6,17 @@ from typing import List, Dict, Any, Optional
 from unittest.mock import MagicMock
 from enum import Enum
 
-from src.schemas.api import (
+from schemas.api import (
     APIResponse, APIError, APISuccess, APIPagination, APIFilter,
     HealthCheck, HealthStatus, SystemInfo, ServiceStatus,
     AnalysisRequest, AnalysisResponse, SimilarityRequest, SimilarityResponse,
     UploadRequest, UploadResponse, DownloadRequest, DownloadResponse,
     SearchRequest
 )
-from src.schemas.websocket import (
+from schemas.websocket import (
     WebSocketMessage, NotificationMessage
 )
-from src.core.exceptions import ValidationError
+from exceptions import ValidationError
 
 
 class TestAPIResponse:

@@ -7,8 +7,8 @@ from pathlib import Path
 import tempfile
 import os
 
-from src.services.renderer import RendererService
-from src.core.config import Settings
+from services.renderer import RendererService
+from core.config import Settings
 
 
 class TestRendererService:

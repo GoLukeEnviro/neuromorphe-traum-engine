@@ -4,7 +4,7 @@ import pytest
 from pydantic import ValidationError
 from typing import List, Dict, Any
 
-from src.schemas.schemas import (
+from schemas.arrangement import (
     ArrangementBase, ArrangementCreate, ArrangementUpdate, ArrangementResponse,
     ArrangementSection, ArrangementStem, ArrangementTransition,
     ArrangementStructure, ArrangementMetadata

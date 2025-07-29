@@ -75,6 +75,67 @@ class NotificationMessage(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ConnectionMessage(BaseModel):
+    """Schema für Verbindungsnachrichten."""
+    client_id: str
+    message: str
+
+class DisconnectionMessage(BaseModel):
+    """Schema für Trennungsnachrichten."""
+    client_id: str
+    message: str
+
+class ErrorMessage(BaseModel):
+    """Schema für Fehlernachrichten."""
+    code: str
+    message: str
+    details: Optional[Dict[str, Any]] = None
+
+class RenderProgressMessage(BaseModel):
+    """Schema für Render-Fortschrittsnachrichten."""
+    job_id: str
+    progress: float
+    current_step: str
+
+class AnalysisProgressMessage(BaseModel):
+    """Schema für Analyse-Fortschrittsnachrichten."""
+    analysis_id: str
+    progress: float
+    current_step: str
+
+class SystemStatusMessage(BaseModel):
+    """Schema für Systemstatus-Nachrichten."""
+    status: str
+    message: str
+    details: Optional[Dict[str, Any]] = None
+
+class BroadcastMessage(BaseModel):
+    """Schema für Broadcast-Nachrichten."""
+    topic: str
+    message: str
+    data: Optional[Dict[str, Any]] = None
+
+class PrivateMessage(BaseModel):
+    """Schema für private Nachrichten."""
+    recipient_client_id: str
+    message: str
+    data: Optional[Dict[str, Any]] = None
+
+class SubscriptionMessage(BaseModel):
+    """Schema für Abonnement-Nachrichten."""
+    client_id: str
+    topic: str
+
+class UnsubscriptionMessage(BaseModel):
+    """Schema für Abbestellungs-Nachrichten."""
+    client_id: str
+    topic: str
+
+class HeartbeatMessage(BaseModel):
+    """Schema für Heartbeat-Nachrichten."""
+    client_id: str
+    timestamp: datetime
+
 class ProgressUpdate(BaseModel):
     """Schema für Fortschritts-Updates."""
     task_id: str

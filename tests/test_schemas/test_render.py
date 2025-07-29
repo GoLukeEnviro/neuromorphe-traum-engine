@@ -4,7 +4,7 @@ import pytest
 from pydantic import ValidationError
 from typing import Dict, Any
 
-from src.schemas.schemas import (
+from schemas.schemas import (
     RenderStatus, RenderPriority, RenderFormat, RenderQuality,
     RenderProgress, RenderSettings, RenderJobCreate, RenderJobUpdate,
     RenderJobBase, RenderJobResponse

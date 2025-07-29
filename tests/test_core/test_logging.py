@@ -6,8 +6,8 @@ import json
 from unittest.mock import patch
 from pathlib import Path
 
-from src.core.logging import setup_logging, get_logger, LoggerManager, ColoredFormatter, StructuredFormatter
-from src.core.config import Settings
+from core.logging import setup_logging, get_logger, LoggerManager, ColoredFormatter, StructuredFormatter
+from core.config import Settings
 
 
 class TestLoggerSetup:

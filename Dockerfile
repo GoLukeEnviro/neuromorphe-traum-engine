@@ -84,7 +84,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 EXPOSE 8000
 
 # Startup Command
-CMD ["python", "run.py", "--mode", "prod", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "-m", "src.main", "--mode", "prod", "--host", "0.0.0.0", "--port", "8000"]
 
 # Development Stage
 FROM production as development
@@ -110,4 +110,4 @@ ENV DATABASE_ECHO=true
 USER appuser
 
 # Development Command
-CMD ["python", "run.py", "--mode", "dev", "--host", "0.0.0.0", "--port", "8000", "--log-level", "DEBUG"]
+CMD ["python", "-m", "src.main", "--mode", "dev", "--host", "0.0.0.0", "--port", "8000", "--log-level", "DEBUG"]

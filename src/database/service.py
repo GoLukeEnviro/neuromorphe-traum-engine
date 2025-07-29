@@ -5,15 +5,16 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
 
-from .database import get_async_db_session
-from .crud import StemCRUD, GeneratedTrackCRUD, ProcessingJobCRUD, SystemMetricsCRUD, ConfigurationCRUD
-from .models import Stem
-from ..schemas.stem import StemCreate
-from ..schemas.schemas import GeneratedTrackCreate
-from ..schemas.schemas import ProcessingJobCreate
-from ..schemas.schemas import SystemMetricCreate
-from ..schemas.schemas import ConfigurationSettingCreate
+from database.database import get_async_db_session
+from database.crud import StemCRUD, GeneratedTrackCRUD, ProcessingJobCRUD, SystemMetricsCRUD, ConfigurationCRUD
+from database.models import Stem
+from schemas.stem import StemCreate
+from schemas.track import GeneratedTrackCreate
+from schemas.job import ProcessingJobCreate
+from schemas.metric import SystemMetricCreate
+from schemas.config import ConfigurationSettingBase
 
 class DatabaseService:
     """Service for database operations using SQLAlchemy"""
@@ -33,12 +34,16 @@ class DatabaseService:
     async def get_stems_by_category(self, category: str, source: Optional[str] = None, limit: int = 50) -> List[Stem]:
         """Get stems by category and optionally by source using SQLAlchemy"""
         async with get_async_db_session() as session:
-            return StemCRUD.get_stems(session, category=category, source=source, limit=limit)
+            return await asyncio.get_event_loop().run_in_executor(
+                None, StemCRUD.get_stems, session, 0, limit, category
+            )
     
     async def get_stems_by_source(self, source: str, limit: int = 50) -> List[Stem]:
         """Get all stems by source (original, separated, generated) using SQLAlchemy"""
         async with get_async_db_session() as session:
-            return StemCRUD.get_stems(session, source=source, limit=limit)
+            return await asyncio.get_event_loop().run_in_executor(
+                None, StemCRUD.get_stems, session, 0, limit, None
+            )
     
     async def get_all_stems(self, 
                            category: Optional[str] = None,
@@ -49,12 +54,16 @@ class DatabaseService:
                            audio_embedding_is_null: Optional[bool] = None) -> List[Stem]:
         """Get all stems with optional filters using SQLAlchemy"""
         async with get_async_db_session() as session:
-            return StemCRUD.get_stems(session, category=category, source=source, limit=limit, skip=skip, audio_embedding_is_not_null=audio_embedding_is_not_null, audio_embedding_is_null=audio_embedding_is_null)
+            return await asyncio.get_event_loop().run_in_executor(
+                None, StemCRUD.get_stems, session, skip or 0, limit or 100, category, None, None, None, None, None, None, None, None, None, None, None, None, None, audio_embedding_is_not_null, audio_embedding_is_null
+            )
     
     async def get_stem_by_id(self, stem_id: int) -> Optional[Stem]:
         """Get single stem by ID using SQLAlchemy"""
         async with get_async_db_session() as session:
-            return StemCRUD.get_stem_by_id(session, stem_id)
+            return await asyncio.get_event_loop().run_in_executor(
+                None, StemCRUD.get_stem_by_id, session, stem_id
+            )
     
     async def update_stem_processing_status(self, stem_id: int, status: str, error_message: Optional[str] = None) -> Optional[Stem]:
         """Update processing status of a stem using SQLAlchemy"""

@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 import traceback
 from datetime import datetime
 
-from src.core.exceptions import (
+from exceptions import (
     NeuromorpheError, ConfigurationError, AudioProcessingError,
     CLAPModelError, DatabaseError, RenderingError, APIError,
     ValidationError, FileNotFoundError, InsufficientResourcesError,

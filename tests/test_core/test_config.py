@@ -4,8 +4,8 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-from src.core.config import Settings, settings as default_settings
-from src.core.exceptions import ConfigurationError
+from core.config import Settings, settings as default_settings
+from exceptions import ConfigurationError
 
 
 class TestSettings:

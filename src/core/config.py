@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     PERFORMANCE_TRACKING: bool = False
     
     # Database
-    DATABASE_URL: str = "sqlite:///processed_database/stems.db"
+    DATABASE_URL: str = "sqlite:///E:/VS-code-Projekte-5.2025/neuromorphe-traum-engine/processed_database/stems_new.db"
     DATABASE_ECHO: bool = False
     ENABLE_DATABASE_MONITORING: bool = False
     SLOW_QUERY_THRESHOLD: float = 0.5

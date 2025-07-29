@@ -5,8 +5,8 @@ from unittest.mock import MagicMock, patch, AsyncMock
 import numpy as np
 from pathlib import Path
 
-from src.services.arranger import ArrangerService
-from src.core.config import Settings
+from services.arranger import ArrangerService
+from core.config import Settings
 
 
 class TestArrangerService:
@@ -15,7 +15,7 @@ class TestArrangerService:
     @pytest.fixture
     def arranger(self) -> ArrangerService:
         """ArrangerService-Instanz für Tests"""
-        with patch('src.services.arranger.DatabaseService') as mock_db_service:
+        with patch('services.arranger.DatabaseService') as mock_db_service:
             arranger = ArrangerService()
             arranger.db_service = mock_db_service.return_value
             return arranger
@@ -23,7 +23,7 @@ class TestArrangerService:
     @pytest.mark.unit
     def test_initialization(self):
         """Test: ArrangerService-Initialisierung"""
-        with patch('src.services.arranger.DatabaseService') as mock_db_service:
+        with patch('services.arranger.DatabaseService') as mock_db_service:
             arranger = ArrangerService()
             assert arranger.parser is not None
             assert arranger.db_service is not None

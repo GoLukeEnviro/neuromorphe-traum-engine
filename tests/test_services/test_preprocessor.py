@@ -6,8 +6,8 @@ import numpy as np
 from pathlib import Path
 import tempfile
 
-from src.services.preprocessor import PreprocessorService
-from src.core.config import Settings
+from services.preprocessor import PreprocessorService
+from core.config import Settings
 from tests.conftest import create_test_audio_file, assert_audio_file_valid
 
 
