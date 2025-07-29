@@ -13,20 +13,21 @@ class TestArrangerService:
     """Test-Suite für ArrangerService"""
     
     @pytest.fixture
-    def arranger(self, test_settings: Settings, mock_neuro_analyzer) -> ArrangerService:
+    def arranger(self) -> ArrangerService:
         """ArrangerService-Instanz für Tests"""
-        return ArrangerService(test_settings, mock_neuro_analyzer)
+        with patch('src.services.arranger.DatabaseService') as mock_db_service:
+            arranger = ArrangerService()
+            arranger.db_service = mock_db_service.return_value
+            return arranger
     
     @pytest.mark.unit
-    def test_initialization(self, test_settings: Settings, mock_neuro_analyzer):
+    def test_initialization(self):
         """Test: ArrangerService-Initialisierung"""
-        arranger = ArrangerService(test_settings, mock_neuro_analyzer)
-        
-        assert arranger.settings == test_settings
-        assert arranger.neuro_analyzer == mock_neuro_analyzer
-        assert arranger.genre_templates is not None
-        assert "techno" in arranger.genre_templates
-        assert "house" in arranger.genre_templates
+        with patch('src.services.arranger.DatabaseService') as mock_db_service:
+            arranger = ArrangerService()
+            assert arranger.parser is not None
+            assert arranger.db_service is not None
+            mock_db_service.assert_called_once()
     
     @pytest.mark.unit
     async def test_create_arrangement_from_prompt(self, arranger: ArrangerService, test_db_session, sample_text_prompts):

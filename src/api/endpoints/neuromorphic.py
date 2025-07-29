@@ -40,10 +40,10 @@ def get_generative_service() -> GenerativeService:
     return GenerativeService()
 
 def get_preprocessor_service() -> PreprocessorService:
-    return PreprocessorService()
+    return PreprocessorService(config=settings)
 
 def get_renderer_service() -> RendererService:
-    return RendererService()
+    return RendererService(config=settings)
 
 
 # Pydantic Models für Request/Response

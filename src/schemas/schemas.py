@@ -1,203 +1,10 @@
 from pydantic import BaseModel
-from pydantic import Field, ConfigDict, field_validator
-from typing import Any, Optional, List, Dict, Union
-from datetime import datetime
-from enum import Enum
+from pydantic import BaseModel
 
-# From api.py
-class APIResponse(BaseModel):
-    success: bool
-    message: Optional[str] = None
-    data: Optional[Any] = None
 
-class APIError(BaseModel):
-    detail: str
+class EmptyResponse(BaseModel):
+    message: str = "Operation successful."
 
-class APISuccess(BaseModel):
-    message: str
-
-class APIPagination(BaseModel):
-    page: int
-    per_page: int
-    total_items: int
-    total_pages: int
-
-class APIFilter(BaseModel):
-    field: str
-    operator: str
-    value: Any
-
-class HealthCheck(BaseModel):
-    status: str
-    version: str
-    database_status: str
-    message: Optional[str] = None
-
-class HealthStatus(BaseModel):
-    status: str
-    message: Optional[str] = None
-
-class SystemInfo(BaseModel):
-    python_version: str
-    os_name: str
-    processor_type: str
-    total_memory_gb: float
-    available_memory_gb: float
-    cpu_usage_percent: float
-    disk_usage_percent: float
-
-class ServiceStatus(BaseModel):
-    service_name: str
-    status: str
-    message: Optional[str] = None
-
-class AnalysisRequest(BaseModel):
-    file_path: str
-    analysis_type: str
-
-class AnalysisResponse(BaseModel):
-    file_path: str
-    analysis_type: str
-    result: Dict[str, Any]
-
-class SimilarityRequest(BaseModel):
-    embedding_1: List[float]
-    embedding_2: List[float]
-
-class SimilarityResponse(BaseModel):
-    similarity_score: float
-
-class UploadRequest(BaseModel):
-    file_name: str
-    content_type: str
-    file_size: int
-
-class UploadResponse(BaseModel):
-    file_path: str
-    message: str
-
-class DownloadRequest(BaseModel):
-    file_path: str
-
-class DownloadResponse(BaseModel):
-    file_path: str
-    message: str
-
-class SearchRequest(BaseModel):
-    query: str
-    top_k: int = 5
-    category_filter: Optional[str] = None
-    bpm_range: Optional[List[float]] = None
-
-# From arrangement.py
-class ArrangementStem(BaseModel):
-    stem_id: int
-    start_offset_bars: int
-    duration_bars: int
-
-class ArrangementSection(BaseModel):
-    section: str
-    bars: int
-    stem_queries: List[Dict[str, Any]]
-    volume: float = 1.0
-    effects: Optional[List[str]] = None
-
-class ArrangementTransition(BaseModel):
-    from_section: str
-    to_section: str
-    transition_type: str
-    duration_bars: int
-    effects: Optional[List[str]] = None
-
-class ArrangementStructure(BaseModel):
-    sections: List[ArrangementSection]
-    transitions: Optional[List[ArrangementTransition]] = None
-
-class ArrangementMetadata(BaseModel):
-    created_with_musical_intelligence: bool
-    harmonic_coherence: bool
-    key_compatibility_used: bool
-
-class ArrangementCreate(BaseModel):
-    bpm: int
-    total_bars: int
-    track_structure: Dict[str, Any]
-    stems: List[int]
-
-class ArrangementUpdate(BaseModel):
-    bpm: Optional[int] = None
-    total_bars: Optional[int] = None
-    track_structure: Optional[Dict[str, Any]] = None
-    stems: Optional[List[int]] = None
-
-class ArrangementBase(BaseModel):
-    bpm: int
-    total_bars: int
-    track_structure: Dict[str, Any]
-    stems: List[int]
-
-class ArrangementResponse(BaseModel):
-    arrangement_id: str
-    prompt: str
-    global_key: str
-    bpm: int
-    genre: str
-    mood: List[str]
-    total_bars: int
-    estimated_duration: float
-    structure: List[Dict[str, Any]]
-    metadata: Dict[str, Any]
-
-# From config.py
-class ConfigDataType(str, Enum):
-    """Datentyp einer Konfigurationseinstellung"""
-    STRING = "string"
-    INTEGER = "integer"
-    FLOAT = "float"
-    BOOLEAN = "boolean"
-    JSON = "json"
-    LIST = "list"
-
-class ConfigCategory(str, Enum):
-    """Kategorie einer Konfigurationseinstellung"""
-    AUDIO = "audio"
-    PROCESSING = "processing"
-    UI = "ui"
-    DATABASE = "database"
-    API = "api"
-    SECURITY = "security"
-    LOGGING = "logging"
-    PERFORMANCE = "performance"
-    GENERATION = "generation"
-    ANALYSIS = "analysis"
-
-class ConfigurationSettingBase(BaseModel):
-    """Basis-Schema für Konfigurationseinstellungen"""
-    category: ConfigCategory
-    key: str = Field(..., min_length=1, max_length=200)
-    value: Union[str, int, float, bool, Dict[str, Any], List[Any]] = Field(..., description="Konfigurationswert")
-    
-    # Metadaten
-    description: Optional[str] = Field(None, description="Beschreibung der Einstellung")
-    data_type: ConfigDataType
-    is_user_configurable: bool = Field(True, description="Kann vom Benutzer geändert werden")
-    requires_restart: bool = Field(False, description="Erfordert Neustart nach Änderung")
-    
-    # Validierung
-    validation_rules: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Validierungsregeln")
-    default_value: Optional[Union[str, int, float, bool, Dict[str, Any], List[Any]]] = Field(None, description="Standardwert")
-    
-    @field_validator('value')
-    @classmethod
-    def validate_value_type(cls, v, info):
-        """Validiert, dass der Wert dem angegebenen Datentyp entspricht"""
-        if not hasattr(info, 'data') or 'data_type' not in info.data:
-            return v
-            
-        data_type = info.data['data_type']
-        
-        if data_type == ConfigDataType.STRING and not isinstance(v, str):
-            raise ValueError('Value must be a string')
         elif data_type == ConfigDataType.INTEGER and not isinstance(v, int):
             raise ValueError('Value must be an integer')
         elif data_type == ConfigDataType.FLOAT and not isinstance(v, (int, float)):
@@ -654,7 +461,7 @@ class RenderProgress(BaseModel):
     message: Optional[str] = None
 
 class RenderSettings(BaseModel):
-    sample_rate: Optional[int] = None
+    sample_rate: int = Field(44100, ge=8000, le=192000)
     bit_depth: Optional[int] = None
     normalize: Optional[bool] = None
     apply_mastering: Optional[bool] = None
@@ -701,14 +508,15 @@ class RenderJobResponse(BaseModel):
 # From stem.py
 class StemBase(BaseModel):
     filename: str
-    original_path: str
+    title: Optional[str] = None
+    original_path: Optional[str] = None
     processed_path: Optional[str] = None
-    file_hash: str
-    duration: float
-    sample_rate: int
-    channels: int
+    file_hash: Optional[str] = None
+    duration: Optional[float] = None
+    sample_rate: int = Field(44100, ge=8000, le=192000)
+    channels: Optional[int] = None
     bit_depth: Optional[int] = None
-    file_size: int
+    file_size: Optional[int] = None
     bpm: Optional[float] = None
     key: Optional[str] = None
     time_signature: Optional[str] = None
@@ -716,14 +524,14 @@ class StemBase(BaseModel):
     genre: Optional[str] = None
     mood: Optional[str] = None
     energy_level: Optional[str] = None
-    source: str
-    auto_tags: Optional[List[str]] = None
-    manual_tags: Optional[List[str]] = None
+    source: Optional[str] = None
+    auto_tags: List[str] = Field(default_factory=list)
+    manual_tags: List[str] = Field(default_factory=list)
     audio_embedding: Optional[List[float]] = None
-    semantic_analysis: Optional[Dict[str, Any]] = None
-    pattern_analysis: Optional[Dict[str, Any]] = None
-    neural_features: Optional[Dict[str, Any]] = None
-    perceptual_mapping: Optional[Dict[str, Any]] = None
+    semantic_analysis: Dict[str, Any] = Field(default_factory=dict)
+    pattern_analysis: Dict[str, Any] = Field(default_factory=dict)
+    neural_features: Dict[str, Any] = Field(default_factory=dict)
+    perceptual_mapping: Dict[str, Any] = Field(default_factory=dict)
     harmonic_complexity: Optional[float] = None
     rhythmic_complexity: Optional[float] = None
     quality_score: Optional[float] = None
@@ -740,7 +548,7 @@ class StemUpdate(StemBase):
     original_path: Optional[str] = None
     file_hash: Optional[str] = None
     duration: Optional[float] = None
-    sample_rate: Optional[int] = None
+    sample_rate: int = Field(44100, ge=8000, le=192000)
     channels: Optional[int] = None
     bit_depth: Optional[int] = None
     file_size: Optional[int] = None
@@ -778,6 +586,27 @@ class StemSearch(BaseModel):
     audio_embedding_is_not_null: Optional[bool] = None
     audio_embedding_is_null: Optional[bool] = None
 
+    @field_validator('bpm_max')
+    @classmethod
+    def validate_bpm_range(cls, v, info):
+        if v is not None and info.data.get('bpm_min') is not None and v < info.data['bpm_min']:
+            raise ValueError('bpm_max must be greater than or equal to bpm_min')
+        return v
+
+    @field_validator('harmonic_complexity_max')
+    @classmethod
+    def validate_harmonic_complexity_range(cls, v, info):
+        if v is not None and info.data.get('harmonic_complexity_min') is not None and v < info.data['harmonic_complexity_min']:
+            raise ValueError('harmonic_complexity_max must be greater than or equal to harmonic_complexity_min')
+        return v
+
+    @field_validator('rhythmic_complexity_max')
+    @classmethod
+    def validate_rhythmic_complexity_range(cls, v, info):
+        if v is not None and info.data.get('rhythmic_complexity_min') is not None and v < info.data['rhythmic_complexity_min']:
+            raise ValueError('rhythmic_complexity_max must be greater than or equal to rhythmic_complexity_min')
+        return v
+
 class StemMetadata(BaseModel):
     bpm: Optional[float] = None
     key: Optional[str] = None
@@ -785,7 +614,7 @@ class StemMetadata(BaseModel):
     genre: Optional[str] = None
     mood: Optional[str] = None
     energy_level: Optional[str] = None
-    auto_tags: Optional[List[str]] = None
+    auto_tags: List[str] = Field(default_factory=list)
     harmonic_complexity: Optional[float] = None
     rhythmic_complexity: Optional[float] = None
     quality_score: Optional[float] = None
@@ -807,10 +636,17 @@ class StemAnalysis(BaseModel):
 class StemSimilarity(BaseModel):
     stem_id_1: int
     stem_id_2: int
-    similarity_score: float
+    similarity_score: float = Field(..., ge=0, le=1)
+
+    @field_validator('stem_id_2')
+    @classmethod
+    def validate_stem_ids_differ(cls, v, info):
+        if v == info.data.get('stem_id_1'):
+            raise ValueError('stem_id_1 and stem_id_2 must be different')
+        return v
 
 class StemBatch(BaseModel):
-    stem_ids: List[int]
+    stem_ids: List[int] = Field(..., min_length=1)
 
 # From track.py
 class TrackStatus(str, Enum):
@@ -830,7 +666,7 @@ class GeneratedTrackBase(BaseModel):
     # Audio-Eigenschaften
     duration: Optional[float] = Field(None, ge=0)
     sample_rate: int = Field(44100, ge=8000, le=192000)
-    channels: int = Field(2, ge=1, le=8)
+    channels: Optional[int] = Field(2, ge=1, le=8)
     file_size: Optional[int] = Field(None, ge=0)
     
     # Musik-Parameter

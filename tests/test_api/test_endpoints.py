@@ -10,6 +10,8 @@ import io
 
 from src.main import app
 from src.core.config import Settings
+from src.database.database import DatabaseManager
+
 
 
 class TestHealthEndpoint:
@@ -414,7 +416,7 @@ class TestStemEndpoints:
     
     def test_search_stems(self, test_client: TestClient):
         """Test: Stems suchen"""
-        with patch('src.database.manager.DatabaseManager.search_stems') as mock_search:
+        with patch('src.database.database.get_database_manager') as mock_get_db_manager:
             mock_search.return_value = {
                 "stems": [
                     {"id": "1", "name": "Kick 1", "type": "kick"},
@@ -436,7 +438,7 @@ class TestStemEndpoints:
         """Test: Stem-Metadaten aktualisieren"""
         stem_id = "stem_123"
         
-        with patch('src.database.manager.DatabaseManager.update_stem') as mock_update:
+        with patch('src.database.manager.DatabaseManager.get_render_job') as mock_get:
             mock_update.return_value = {
                 "id": stem_id,
                 "name": "Updated Kick",
@@ -459,7 +461,7 @@ class TestStemEndpoints:
         """Test: Stem löschen"""
         stem_id = "stem_123"
         
-        with patch('src.database.manager.DatabaseManager.delete_stem') as mock_delete:
+        with patch('src.database.database.get_database_manager().delete_stem') as mock_delete:
             mock_delete.return_value = True
             
             response = test_client.delete(f"/api/v1/stems/{stem_id}")

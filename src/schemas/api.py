@@ -1,171 +1,105 @@
-"""API-Schemata für die Neuromorphe Traum-Engine."""
-
-from typing import Any, Dict, List, Optional, Union
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, Field
+from typing import Any, Optional, List, Dict
 from datetime import datetime
 
 
-class SearchRequest(BaseModel):
-    """Schema für Such-Anfragen."""
-    query: str
-    limit: Optional[int] = 10
-    offset: Optional[int] = 0
-    filters: Optional[Dict[str, Any]] = None
-    
-    model_config = ConfigDict(from_attributes=True)
-
-
 class APIResponse(BaseModel):
-    """Basis-Schema für API-Antworten."""
     success: bool
     message: Optional[str] = None
-    timestamp: datetime = datetime.now()
-    
-    model_config = ConfigDict(from_attributes=True)
-
-
-class APIError(APIResponse):
-    """Schema für API-Fehler."""
-    success: bool = False
-    error_code: Optional[str] = None
-    details: Optional[Dict[str, Any]] = None
-
-
-class APISuccess(APIResponse):
-    """Schema für erfolgreiche API-Antworten."""
-    success: bool = True
     data: Optional[Any] = None
 
 
+class APIError(BaseModel):
+    detail: str
+
+
+class APISuccess(BaseModel):
+    message: str
+
+
 class APIPagination(BaseModel):
-    """Schema für Paginierung."""
-    page: int = 1
-    per_page: int = 10
-    total: int = 0
-    pages: int = 0
-    
-    model_config = ConfigDict(from_attributes=True)
+    page: int
+    per_page: int
+    total_items: int
+    total_pages: int
 
 
 class APIFilter(BaseModel):
-    """Schema für API-Filter."""
     field: str
-    operator: str = "eq"  # eq, ne, gt, lt, gte, lte, in, like
+    operator: str
     value: Any
-    
-    model_config = ConfigDict(from_attributes=True)
 
 
 class HealthCheck(BaseModel):
-    """Schema für Health-Check."""
-    status: str = "healthy"
-    timestamp: datetime = datetime.now()
-    version: Optional[str] = None
-    
-    model_config = ConfigDict(from_attributes=True)
+    status: str
+    version: str
+    database_status: str
+    message: Optional[str] = None
 
 
 class HealthStatus(BaseModel):
-    """Schema für detaillierten Health-Status."""
-    overall: str
-    database: str
-    storage: str
-    ai_models: str
-    
-    model_config = ConfigDict(from_attributes=True)
+    status: str
+    message: Optional[str] = None
 
 
 class SystemInfo(BaseModel):
-    """Schema für System-Informationen."""
-    version: str
-    environment: str
-    uptime: float
-    memory_usage: float
-    cpu_usage: float
-    
-    model_config = ConfigDict(from_attributes=True)
+    python_version: str
+    os_name: str
+    processor_type: str
+    total_memory_gb: float
+    available_memory_gb: float
+    cpu_usage_percent: float
+    disk_usage_percent: float
 
 
 class ServiceStatus(BaseModel):
-    """Schema für Service-Status."""
-    name: str
+    service_name: str
     status: str
-    last_check: datetime
-    response_time: Optional[float] = None
-    
-    model_config = ConfigDict(from_attributes=True)
+    message: Optional[str] = None
 
 
 class AnalysisRequest(BaseModel):
-    """Schema für Analyse-Anfragen."""
-    audio_path: str
-    analysis_type: str = "full"
-    parameters: Optional[Dict[str, Any]] = None
-    
-    model_config = ConfigDict(from_attributes=True)
+    file_path: str
+    analysis_type: str
 
 
 class AnalysisResponse(BaseModel):
-    """Schema für Analyse-Antworten."""
-    analysis_id: str
-    status: str
-    results: Optional[Dict[str, Any]] = None
-    created_at: datetime
-    
-    model_config = ConfigDict(from_attributes=True)
+    file_path: str
+    analysis_type: str
+    result: Dict[str, Any]
 
 
 class SimilarityRequest(BaseModel):
-    """Schema für Ähnlichkeits-Anfragen."""
-    reference_id: str
-    threshold: float = 0.7
-    limit: int = 10
-    
-    model_config = ConfigDict(from_attributes=True)
+    embedding_1: List[float]
+    embedding_2: List[float]
 
 
 class SimilarityResponse(BaseModel):
-    """Schema für Ähnlichkeits-Antworten."""
-    reference_id: str
-    matches: List[Dict[str, Any]]
-    total_matches: int
-    
-    model_config = ConfigDict(from_attributes=True)
+    similarity_score: float
 
 
 class UploadRequest(BaseModel):
-    """Schema für Upload-Anfragen."""
-    filename: str
+    file_name: str
     content_type: str
-    size: int
-    metadata: Optional[Dict[str, Any]] = None
-    
-    model_config = ConfigDict(from_attributes=True)
+    file_size: Optional[int] = None
 
 
 class UploadResponse(BaseModel):
-    """Schema für Upload-Antworten."""
-    upload_id: str
-    filename: str
-    url: str
-    status: str = "uploaded"
-    
-    model_config = ConfigDict(from_attributes=True)
+    file_path: str
+    message: str
 
 
 class DownloadRequest(BaseModel):
-    """Schema für Download-Anfragen."""
-    file_id: str
-    format: Optional[str] = None
-    quality: Optional[str] = None
-    
-    model_config = ConfigDict(from_attributes=True)
+    file_path: str
 
 
 class DownloadResponse(BaseModel):
-    """Schema für Download-Antworten."""
-    file_id: str
-    download_url: str
-    expires_at: datetime
-    
-    model_config = ConfigDict(from_attributes=True)
+    file_path: str
+    message: str
+
+
+class SearchRequest(BaseModel):
+    query: str
+    top_k: int = 5
+    category_filter: Optional[str] = None
+    bpm_range: Optional[List[float]] = None

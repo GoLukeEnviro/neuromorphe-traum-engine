@@ -20,12 +20,13 @@ logger = logging.getLogger(__name__)
 class RendererService:
     """Service für das Rendern von Audio-Tracks aus arrangierten Stems."""
     
-    def __init__(self):
+    def __init__(self, config: settings):
         """Initialisiert den RendererService.
         """
+        self.config = config
         self.db_service = DatabaseService()
-        self.sample_rate = settings.SAMPLE_RATE # Annahme: Sample Rate aus Settings
-        self.rendered_dir = Path(settings.RENDERED_DIR)
+        self.sample_rate = self.config.AUDIO_SAMPLE_RATE
+        self.rendered_dir = Path(self.config.RENDERED_TRACKS_DIR)
         self.rendered_dir.mkdir(parents=True, exist_ok=True)
         logger.info("RendererService initialisiert")
     

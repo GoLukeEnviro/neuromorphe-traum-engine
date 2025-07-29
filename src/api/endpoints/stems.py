@@ -27,7 +27,7 @@ def get_arranger_service() -> ArrangerService:
     return ArrangerService(settings=settings) # Annahme: ArrangerService benötigt Settings
 
 def get_renderer_service() -> RendererService:
-    return RendererService(settings=settings) # Annahme: RendererService benötigt Settings
+    return RendererService(config=settings)
 
 def get_database_service() -> DatabaseService:
     return DatabaseService()

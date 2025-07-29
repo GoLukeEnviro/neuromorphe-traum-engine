@@ -32,11 +32,14 @@ class Settings(BaseSettings):
     
     # File Storage
     UPLOAD_DIR: str = "./raw_construction_kits"
-    PROCESSED_DIR: str = "./processed_database/stems"
+    PROCESSED_STEMS_DIR: str = "./processed_database/stems"
     EMBEDDINGS_DIR: str = "./dataembeddings"
-    GENERATED_TRACKS_DIR: str = "./generated_tracks"
+    RENDERED_TRACKS_DIR: str = "./rendered_tracks"
     STEREO_TRACKS_DIR: str = "./stereo_tracks_for_analysis"
     MAX_FILE_SIZE: int = 100 * 1024 * 1024  # 100MB
+
+    # Audio Settings
+    AUDIO_SAMPLE_RATE: int = 44100
     
     # CLAP Model
     MODEL_CACHE_DIR: str = "./models"

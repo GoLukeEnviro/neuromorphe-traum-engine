@@ -450,14 +450,15 @@ class TagGenerator:
 class PreprocessorService:
     """Hauptservice für Audio-Preprocessing"""
     
-    def __init__(self):
-        self.analyzer = AudioAnalyzer()
+    def __init__(self, config: settings):
+        self.config = config
+        self.analyzer = AudioAnalyzer(sample_rate=self.config.AUDIO_SAMPLE_RATE)
         self.tag_generator = TagGenerator()
         self.neuro_analyzer = NeuroAnalyzer()
         self.db_service = DatabaseService()
         
         # Verzeichnisse sicherstellen
-        self.processed_dir = Path(settings.PROCESSED_DIR)
+        self.processed_dir = Path(self.config.PROCESSED_STEMS_DIR)
         self.stems_dir = self.processed_dir / "stems"
         self.quarantine_dir = self.processed_dir / "quarantine"
         

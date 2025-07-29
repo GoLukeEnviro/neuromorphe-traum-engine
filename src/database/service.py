@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .database import get_async_db_session
 from .crud import StemCRUD, GeneratedTrackCRUD, ProcessingJobCRUD, SystemMetricsCRUD, ConfigurationCRUD
 from .models import Stem
-from ..schemas.schemas import StemCreate
+from ..schemas.stem import StemCreate
 from ..schemas.schemas import GeneratedTrackCreate
 from ..schemas.schemas import ProcessingJobCreate
 from ..schemas.schemas import SystemMetricCreate

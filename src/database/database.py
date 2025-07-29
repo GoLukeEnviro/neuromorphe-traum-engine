@@ -20,19 +20,28 @@ from sqlalchemy.pool import StaticPool
 from sqlalchemy.exc import SQLAlchemyError
 import aiosqlite
 
-from ..core.config import settings
+from ..core.config import settings, Settings
 from ..core.logging import get_logger
 from .models import Base
 
+
+async def create_tables(engine: AsyncEngine):
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+
+async def drop_tables(engine: AsyncEngine):
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+
 # Settings und Logger
-settings = settings
 logger = get_logger(__name__)
 
 
 class DatabaseManager:
     """Manager für Datenbankverbindungen und -operationen"""
     
-    def __init__(self):
+    def __init__(self, settings: Settings = settings):
         self.settings = settings
         self.logger = get_logger(self.__class__.__name__)
         

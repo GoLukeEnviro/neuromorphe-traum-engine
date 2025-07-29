@@ -13,30 +13,26 @@ class TestNeuroAnalyzer:
     """Test-Suite für NeuroAnalyzer"""
     
     @pytest.fixture
-    def analyzer(self, test_settings: Settings) -> NeuroAnalyzer:
+    def analyzer(self) -> NeuroAnalyzer:
         """NeuroAnalyzer-Instanz für Tests"""
-        with patch('src.services.neuro_analyzer.ClapModel') as mock_model, \
-             patch('src.services.neuro_analyzer.ClapProcessor') as mock_processor:
-            
-            # Mock CLAP-Modell
-            mock_model.from_pretrained.return_value = MagicMock()
-            mock_processor.from_pretrained.return_value = MagicMock()
-            
-            analyzer = NeuroAnalyzer(test_settings)
+        with patch('src.services.neuro_analyzer.SemanticAnalyzer') as mock_semantic, patch('src.services.neuro_analyzer.PatternAnalyzer') as mock_pattern:
+            analyzer = NeuroAnalyzer()
+            analyzer.semantic_analyzer = mock_semantic.return_value
+            analyzer.pattern_analyzer = mock_pattern.return_value
             return analyzer
     
     @pytest.mark.unit
-    def test_initialization(self, test_settings: Settings):
+    def test_initialization(self):
         """Test: NeuroAnalyzer-Initialisierung"""
-        with patch('src.services.neuro_analyzer.ClapModel') as mock_model, \
-             patch('src.services.neuro_analyzer.ClapProcessor') as mock_processor:
+        with patch('src.services.neuro_analyzer.SemanticAnalyzer') as mock_semantic, \
+             patch('src.services.neuro_analyzer.PatternAnalyzer') as mock_pattern:
             
-            analyzer = NeuroAnalyzer(test_settings)
+            analyzer = NeuroAnalyzer()
             
-            assert analyzer.settings == test_settings
-            assert analyzer.device is not None
-            mock_model.from_pretrained.assert_called_once()
-            mock_processor.from_pretrained.assert_called_once()
+            assert analyzer.semantic_analyzer is not None
+            assert analyzer.pattern_analyzer is not None
+            mock_semantic.assert_called_once()
+            mock_pattern.assert_called_once()
     
     @pytest.mark.unit
     async def test_analyze_audio_success(self, analyzer: NeuroAnalyzer, sample_audio_data: bytes):

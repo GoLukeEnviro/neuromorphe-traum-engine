@@ -5,7 +5,7 @@ import os
 import tempfile
 from pathlib import Path
 from typing import AsyncGenerator, Generator, List
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch, patch
 
 import pytest
 
@@ -16,8 +16,8 @@ from sqlalchemy.orm import sessionmaker
 
 # Test-spezifische Imports
 from src.core.config import Settings
-from src.database.database import DatabaseManager
-from src.database.database import get_async_db_session
+from src.database.database import get_async_db_session, get_db
+from src.database.crud import create_tables
 from src.database.models import Base
 from src.main import app
 from src.services.arranger import ArrangerService
@@ -28,8 +28,7 @@ from src.services.renderer import RendererService
 
 @pytest.fixture(scope="session")
 def event_loop():
-    """Event Loop für async Tests"""
-    loop = asyncio.new_event_loop()
+    loop = asyncio.get_event_loop()
     yield loop
     loop.close()
 
@@ -71,48 +70,33 @@ def temp_dir() -> Generator[Path, None, None]:
         yield Path(temp_dir)
 
 
-@pytest.fixture(scope="function")
-async def test_db_manager(test_settings: Settings, temp_dir: Path) -> AsyncGenerator[DatabaseManager, None]:
-    """Test-Datenbankmanager"""
-    # Test-Datenbank in temporärem Verzeichnis
-    test_db_path = temp_dir / "test.db"
-    test_settings.database_url = f"sqlite:///{test_db_path}"
-    test_settings.async_database_url = f"sqlite+aiosqlite:///{test_db_path}"
-    
-    db_manager = DatabaseManager(test_settings)
-    await db_manager.initialize()
-    
-    # Tabellen erstellen
-    await db_manager.create_tables()
-    
-    yield db_manager
-    
-    # Cleanup
-    await db_manager.close()
-    if test_db_path.exists():
-        test_db_path.unlink()
+@pytest.fixture(scope="session")
+async def db_engine():
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    await create_tables(engine)
+    yield engine
+    await engine.dispose()
+
+
+@pytest.fixture
+async def db_session(db_engine):
+    async with db_engine.begin() as connection:
+        async with AsyncSession(bind=connection) as session:
+            yield session
 
 
 @pytest.fixture(scope="function")
-async def test_db_session(test_db_manager: DatabaseManager) -> AsyncGenerator[AsyncSession, None]:
-    """Test-Datenbank-Session"""
-    async with test_db_manager.get_async_session() as session:
-        yield session
-
-
-@pytest.fixture(scope="function")
-def test_client(test_settings: Settings, test_db_manager: DatabaseManager) -> TestClient:
+def test_client(test_settings: Settings, db_session: AsyncSession) -> Generator[TestClient, None, None]:
     """FastAPI Test-Client"""
-    app = create_app(test_settings)
     
     # Dependency Override für Datenbank
-    async def override_get_db():
-        async with test_db_manager.get_async_session() as session:
-            yield session
+    async def override_get_db_session() -> AsyncGenerator[AsyncSession, None]:
+        yield db_session
     
-    app.dependency_overrides[get_database_session] = override_get_db
+    app.dependency_overrides[get_async_db_session] = override_get_db_session
     
-    return TestClient(app)
+    with TestClient(app) as c:
+        yield c
 
 
 @pytest.fixture(scope="function")
@@ -130,11 +114,6 @@ def mock_neuro_analyzer() -> MagicMock:
             "valence": 0.6
         }
     }
-    
-    mock.get_similar_stems.return_value = [
-        {"id": 1, "similarity": 0.9},
-        {"id": 2, "similarity": 0.8}
-    ]
     
     return mock
 
