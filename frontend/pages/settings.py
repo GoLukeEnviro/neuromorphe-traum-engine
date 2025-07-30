@@ -1,410 +1,633 @@
 import streamlit as st
 import requests
 import os
-from typing import Dict, Any
+import json
+import time
+from typing import Dict, Any, Optional
 
+# Page configuration
+backend_url = st.session_state.get('backend_url', 'http://localhost:8508')
+default_settings = {
+    'backend_url': 'http://localhost:8000',
+    'connection_timeout': 30,
+    'max_results': 50,
+    'similarity_threshold': 0.1,
+    'audio_format': 'wav',
+    'sample_rate': 44100,
+    'auto_play': False,
+    'theme': 'dark'
+}
 
-class SettingsPage:
-    """Application settings and configuration page"""
+def test_backend_connection(url: str, timeout: int = 30) -> Dict[str, Any]:
+    """Test backend connection"""
+    try:
+        response = requests.get(f"{url}/health", timeout=timeout)
+        if response.status_code == 200:
+            return {
+                'status': 'success',
+                'message': 'Backend connection successful',
+                'data': response.json()
+            }
+        else:
+            return {
+                'status': 'error',
+                'message': f'Backend returned status {response.status_code}',
+                'data': None
+            }
+    except Exception as e:
+        return {
+            'status': 'error',
+            'message': f'Connection failed: {str(e)}',
+            'data': None
+        }
+
+def get_backend_stats() -> Dict[str, Any]:
+    """Get backend statistics"""
+    try:
+        response = requests.get(f"{backend_url}/api/v1/stats", timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        else:
+            return {}
+    except Exception:
+        return {}
+
+def get_api_info() -> Dict[str, Any]:
+    """Get API information"""
+    try:
+        response = requests.get(f"{backend_url}/api/v1/info", timeout=10)
+        if response.status_code == 200:
+            return response.json()
+        else:
+            return {}
+    except Exception:
+        return {}
+
+def render_backend_settings():
+    """Render backend connection settings"""
+    st.header("🔗 Backend-Verbindung")
     
-    def __init__(self):
-        self.backend_url = None
+    # Current settings
+    current_url = st.session_state.get('backend_url', default_settings['backend_url'])
+    current_timeout = st.session_state.get('connection_timeout', default_settings['connection_timeout'])
+    current_api_key = st.session_state.get('api_key', '')
     
-    def render(self):
-        """Render the settings page"""
-        self.backend_url = st.session_state.get('backend_url', 'http://localhost:8000')
+    # Settings form
+    with st.form("backend_settings"):
+        st.subheader("Verbindungseinstellungen")
         
-        st.title("⚙️ Settings & Configuration")
-        st.markdown("Configure the Neuromorphe Traum-Engine application settings.")
+        new_url = st.text_input(
+            "Backend URL",
+            value=current_url,
+            help="URL des Backend-Servers (z.B. http://localhost:8000)"
+        )
         
-        # Settings tabs
-        tab1, tab2, tab3, tab4 = st.tabs(["🔗 Backend", "🎵 Audio", "🔍 Search", "📊 System"])
+        new_timeout = st.number_input(
+            "Verbindungs-Timeout (Sekunden)",
+            min_value=5,
+            max_value=120,
+            value=current_timeout,
+            help="Maximale Wartezeit für Backend-Anfragen"
+        )
         
-        with tab1:
-            self._render_backend_settings()
-        
-        with tab2:
-            self._render_audio_settings()
-        
-        with tab3:
-            self._render_search_settings()
-        
-        with tab4:
-            self._render_system_info()
-    
-    def _render_backend_settings(self):
-        """Render backend connection settings"""
-        st.header("🔗 Backend Connection")
-        
-        with st.form("backend_settings"):
-            # Backend URL configuration
-            current_url = st.session_state.get('backend_url', 'http://localhost:8000')
-            
-            backend_url = st.text_input(
-                "Backend URL",
-                value=current_url,
-                help="URL of the FastAPI backend server"
-            )
-            
-            # Connection timeout
-            timeout = st.number_input(
-                "Connection Timeout (seconds)",
-                min_value=5,
-                max_value=120,
-                value=st.session_state.get('connection_timeout', 30),
-                help="Timeout for API requests"
-            )
-            
-            # Auto-retry settings
-            max_retries = st.number_input(
-                "Max Retries",
-                min_value=0,
-                max_value=5,
-                value=st.session_state.get('max_retries', 3),
-                help="Maximum number of retry attempts for failed requests"
-            )
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                if st.form_submit_button("💾 Save Settings", type="primary"):
-                    st.session_state.backend_url = backend_url
-                    st.session_state.connection_timeout = timeout
-                    st.session_state.max_retries = max_retries
-                    st.success("✅ Backend settings saved!")
-                    st.rerun()
-            
-            with col2:
-                if st.form_submit_button("🔄 Test Connection"):
-                    self._test_backend_connection(backend_url, timeout)
-        
-        # Connection status
-        self._show_connection_status()
-    
-    def _render_audio_settings(self):
-        """Render audio processing settings"""
-        st.header("🎵 Audio Processing")
-        
-        with st.form("audio_settings"):
-            # File upload limits
-            max_file_size = st.number_input(
-                "Max File Size (MB)",
-                min_value=1,
-                max_value=100,
-                value=st.session_state.get('max_file_size_mb', 50),
-                help="Maximum size for uploaded audio files"
-            )
-            
-            # Supported formats
-            st.subheader("📁 Supported Audio Formats")
-            
-            supported_formats = st.session_state.get('supported_formats', ['wav', 'mp3', 'flac', 'ogg'])
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                wav_enabled = st.checkbox("WAV", value='wav' in supported_formats)
-                mp3_enabled = st.checkbox("MP3", value='mp3' in supported_formats)
-            
-            with col2:
-                flac_enabled = st.checkbox("FLAC", value='flac' in supported_formats)
-                ogg_enabled = st.checkbox("OGG", value='ogg' in supported_formats)
-            
-            # Processing options
-            st.subheader("⚡ Processing Options")
-            
-            auto_process = st.checkbox(
-                "Auto-process uploads",
-                value=st.session_state.get('auto_process', True),
-                help="Automatically generate embeddings after upload"
-            )
-            
-            batch_size = st.number_input(
-                "Batch Processing Size",
-                min_value=1,
-                max_value=10,
-                value=st.session_state.get('batch_size', 5),
-                help="Number of files to process simultaneously"
-            )
-            
-            if st.form_submit_button("💾 Save Audio Settings", type="primary"):
-                # Update supported formats
-                new_formats = []
-                if wav_enabled:
-                    new_formats.append('wav')
-                if mp3_enabled:
-                    new_formats.append('mp3')
-                if flac_enabled:
-                    new_formats.append('flac')
-                if ogg_enabled:
-                    new_formats.append('ogg')
-                
-                st.session_state.max_file_size_mb = max_file_size
-                st.session_state.supported_formats = new_formats
-                st.session_state.auto_process = auto_process
-                st.session_state.batch_size = batch_size
-                
-                st.success("✅ Audio settings saved!")
-                st.rerun()
-    
-    def _render_search_settings(self):
-        """Render search configuration settings"""
-        st.header("🔍 Search Configuration")
-        
-        with st.form("search_settings"):
-            # Default search parameters
-            default_limit = st.number_input(
-                "Default Result Limit",
-                min_value=5,
-                max_value=100,
-                value=st.session_state.get('default_search_limit', 10),
-                help="Default number of search results to return"
-            )
-            
-            default_threshold = st.slider(
-                "Default Similarity Threshold",
-                min_value=0.0,
-                max_value=1.0,
-                value=st.session_state.get('default_similarity_threshold', 0.3),
-                step=0.05,
-                help="Default minimum similarity score for search results"
-            )
-            
-            # Search behavior
-            st.subheader("🎯 Search Behavior")
-            
-            enable_fuzzy_search = st.checkbox(
-                "Enable Fuzzy Search",
-                value=st.session_state.get('enable_fuzzy_search', True),
-                help="Allow approximate matching for text queries"
-            )
-            
-            cache_results = st.checkbox(
-                "Cache Search Results",
-                value=st.session_state.get('cache_search_results', True),
-                help="Cache search results for faster repeated queries"
-            )
-            
-            max_history = st.number_input(
-                "Max Search History",
-                min_value=5,
-                max_value=100,
-                value=st.session_state.get('max_search_history', 20),
-                help="Maximum number of searches to keep in history"
-            )
-            
-            # Advanced options
-            st.subheader("🔧 Advanced Options")
-            
-            enable_category_boost = st.checkbox(
-                "Enable Category Boost",
-                value=st.session_state.get('enable_category_boost', False),
-                help="Boost results from the same category"
-            )
-            
-            enable_bpm_filtering = st.checkbox(
-                "Enable BPM Filtering",
-                value=st.session_state.get('enable_bpm_filtering', True),
-                help="Allow filtering by BPM range"
-            )
-            
-            if st.form_submit_button("💾 Save Search Settings", type="primary"):
-                st.session_state.default_search_limit = default_limit
-                st.session_state.default_similarity_threshold = default_threshold
-                st.session_state.enable_fuzzy_search = enable_fuzzy_search
-                st.session_state.cache_search_results = cache_results
-                st.session_state.max_search_history = max_history
-                st.session_state.enable_category_boost = enable_category_boost
-                st.session_state.enable_bpm_filtering = enable_bpm_filtering
-                
-                st.success("✅ Search settings saved!")
-                st.rerun()
-    
-    def _render_system_info(self):
-        """Render system information and diagnostics"""
-        st.header("📊 System Information")
-        
-        # Backend health check
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            if st.button("🏥 Check Backend Health", use_container_width=True):
-                self._check_backend_health()
-        
-        with col2:
-            if st.button("📊 Get System Stats", use_container_width=True):
-                self._get_system_stats()
-        
-        # Session state info
-        st.subheader("🔧 Session Information")
-        
-        with st.expander("📋 Session State", expanded=False):
-            # Filter out sensitive or large data
-            filtered_state = {}
-            for key, value in st.session_state.items():
-                if key not in ['search_results', 'uploaded_files'] and not key.startswith('_'):
-                    filtered_state[key] = value
-            
-            st.json(filtered_state)
-        
-        # Application info
-        st.subheader("ℹ️ Application Information")
+        new_api_key = st.text_input(
+            "API Key (optional)",
+            value=current_api_key,
+            type="password",
+            help="API-Schlüssel für authentifizierte Anfragen"
+        )
         
         col1, col2 = st.columns(2)
         
         with col1:
-            st.write("**Application**: Neuromorphe Traum-Engine v2.0")
-            st.write("**Frontend**: Streamlit")
-            st.write("**Backend**: FastAPI")
+            if st.form_submit_button("💾 Einstellungen speichern", type="primary"):
+                save_backend_settings(new_url, new_timeout, new_api_key)
         
         with col2:
-            st.write("**AI Model**: CLAP (Contrastive Language-Audio Pre-training)")
-            st.write("**Database**: SQLite")
-            st.write("**Architecture**: Domain-driven Design")
+            if st.form_submit_button("🔍 Verbindung testen"):
+                test_connection_ui(new_url, new_timeout)
+    
+    # Connection status
+    show_connection_status()
+    
+    # Endpoints overview
+    render_endpoints_overview()
+
+def show_connection_status():
+    """Show current connection status"""
+    st.subheader("📊 Verbindungsstatus")
+    
+    current_url = st.session_state.get('backend_url', default_settings['backend_url'])
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        if st.button("🔄 Status prüfen", use_container_width=True):
+            check_backend_health()
+    
+    with col2:
+        st.metric("Backend URL", current_url)
+    
+    with col3:
+        last_check = st.session_state.get('last_backend_check', 'Nie')
+        st.metric("Letzte Prüfung", last_check)
+
+def save_backend_settings(url: str, timeout: int, api_key: str):
+    """Save backend settings"""
+    st.session_state.backend_url = url.rstrip('/')
+    st.session_state.connection_timeout = timeout
+    st.session_state.api_key = api_key
+    
+    st.success("✅ Einstellungen gespeichert!")
+    st.rerun()
+
+def test_connection_ui(url: str, timeout: int):
+    """Test backend connection with UI feedback"""
+    with st.spinner("Teste Verbindung..."):
+        result = test_backend_connection(url, timeout)
         
-        # Clear data options
-        st.subheader("🗑️ Data Management")
-        
-        col1, col2, col3 = st.columns(3)
+        if result['status'] == 'success':
+            st.success(f"✅ {result['message']}")
+            if result['data']:
+                st.json(result['data'])
+        else:
+            st.error(f"❌ {result['message']}")
+
+def render_endpoints_overview():
+    """Render available endpoints overview"""
+    st.subheader("🛠️ Verfügbare Endpunkte")
+    
+    endpoints = [
+        {"method": "GET", "path": "/health", "description": "Backend-Gesundheitsstatus"},
+        {"method": "GET", "path": "/api/v1/audio/files", "description": "Liste aller Audio-Dateien"},
+        {"method": "POST", "path": "/api/v1/audio/upload", "description": "Audio-Datei hochladen"},
+        {"method": "POST", "path": "/api/v1/search/text", "description": "Textbasierte Suche"},
+        {"method": "POST", "path": "/api/v1/search/similar", "description": "Ähnlichkeitssuche"},
+        {"method": "GET", "path": "/api/v1/stats", "description": "Backend-Statistiken"}
+    ]
+    
+    for endpoint in endpoints:
+        col1, col2, col3 = st.columns([1, 2, 4])
         
         with col1:
-            if st.button("🗑️ Clear Search History", use_container_width=True):
-                if 'search_history' in st.session_state:
-                    del st.session_state.search_history
-                st.success("Search history cleared!")
-                st.rerun()
+            method_color = {
+                "GET": "🟢",
+                "POST": "🔵",
+                "PUT": "🟡",
+                "DELETE": "🔴"
+            }.get(endpoint["method"], "⚪")
+            st.write(f"{method_color} {endpoint['method']}")
         
         with col2:
-            if st.button("🗑️ Clear Upload History", use_container_width=True):
-                if 'uploaded_files' in st.session_state:
-                    del st.session_state.uploaded_files
-                st.success("Upload history cleared!")
-                st.rerun()
+            st.code(endpoint["path"])
         
         with col3:
-            if st.button("🗑️ Clear All Cache", use_container_width=True):
-                # Clear various cached data
-                keys_to_clear = ['search_results', 'last_query', 'selected_results', 'stats']
-                for key in keys_to_clear:
-                    if key in st.session_state:
-                        del st.session_state[key]
-                st.success("All cache cleared!")
-                st.rerun()
+            st.write(endpoint["description"])
+
+def render_audio_settings():
+    """Render audio processing settings"""
+    st.header("🎵 Audio-Einstellungen")
     
-    def _test_backend_connection(self, url: str, timeout: int):
-        """Test connection to backend"""
-        try:
-            with st.spinner("Testing backend connection..."):
-                response = requests.get(f"{url}/", timeout=timeout)
-                
-                if response.status_code == 200:
-                    st.success(f"✅ Connection successful! Backend is reachable at {url}")
-                    
-                    # Try to get API info
-                    try:
-                        api_response = requests.get(f"{url}/api/v1/", timeout=timeout)
-                        if api_response.status_code == 200:
-                            api_info = api_response.json()
-                            st.info(f"📡 API Version: {api_info.get('version', 'Unknown')}")
-                    except:
-                        pass
-                else:
-                    st.error(f"❌ Connection failed! Status code: {response.status_code}")
-        except requests.exceptions.Timeout:
-            st.error(f"⏰ Connection timeout after {timeout} seconds")
-        except requests.exceptions.ConnectionError:
-            st.error(f"🔌 Connection error! Cannot reach {url}")
-        except Exception as e:
-            st.error(f"❌ Unexpected error: {str(e)}")
+    # Current settings
+    current_format = st.session_state.get('audio_format', default_settings['audio_format'])
+    current_sample_rate = st.session_state.get('sample_rate', default_settings['sample_rate'])
+    current_auto_play = st.session_state.get('auto_play', default_settings['auto_play'])
     
-    def _show_connection_status(self):
-        """Show current connection status"""
-        st.subheader("📡 Connection Status")
+    with st.form("audio_settings"):
+        st.subheader("Audio-Verarbeitung")
         
-        try:
-            response = requests.get(f"{self.backend_url}/", timeout=5)
+        # Audio format
+        audio_format = st.selectbox(
+            "Bevorzugtes Audio-Format",
+            options=['wav', 'mp3', 'flac', 'ogg'],
+            index=['wav', 'mp3', 'flac', 'ogg'].index(current_format),
+            help="Format für Audio-Export und -verarbeitung"
+        )
+        
+        # Sample rate
+        sample_rate = st.selectbox(
+            "Sample Rate (Hz)",
+            options=[22050, 44100, 48000, 96000],
+            index=[22050, 44100, 48000, 96000].index(current_sample_rate),
+            help="Abtastrate für Audio-Verarbeitung"
+        )
+        
+        # Auto-play
+        auto_play = st.checkbox(
+            "Automatische Wiedergabe",
+            value=current_auto_play,
+            help="Automatisches Abspielen von Suchergebnissen"
+        )
+        
+        # Quality settings
+        st.subheader("Qualitätseinstellungen")
+        
+        bit_depth = st.selectbox(
+            "Bit-Tiefe",
+            options=[16, 24, 32],
+            index=1,
+            help="Bit-Tiefe für Audio-Verarbeitung"
+        )
+        
+        # Processing settings
+        st.subheader("Verarbeitungseinstellungen")
+        
+        normalize_audio = st.checkbox(
+            "Audio normalisieren",
+            value=True,
+            help="Automatische Lautstärke-Normalisierung"
+        )
+        
+        remove_silence = st.checkbox(
+            "Stille entfernen",
+            value=False,
+            help="Automatisches Entfernen von Stille am Anfang/Ende"
+        )
+        
+        # Advanced settings
+        with st.expander("🔧 Erweiterte Einstellungen"):
+            chunk_size = st.number_input(
+                "Chunk-Größe (Samples)",
+                min_value=512,
+                max_value=8192,
+                value=2048,
+                step=512,
+                help="Größe der Audio-Chunks für Verarbeitung"
+            )
+            
+            overlap = st.slider(
+                "Overlap (%)",
+                min_value=0,
+                max_value=50,
+                value=25,
+                help="Überlappung zwischen Audio-Chunks"
+            )
+            
+            window_function = st.selectbox(
+                "Fensterfunktion",
+                options=['hann', 'hamming', 'blackman', 'bartlett'],
+                help="Fensterfunktion für Spektralanalyse"
+            )
+        
+        if st.form_submit_button("💾 Audio-Einstellungen speichern", type="primary"):
+            # Save audio settings
+            st.session_state.audio_format = audio_format
+            st.session_state.sample_rate = sample_rate
+            st.session_state.auto_play = auto_play
+            st.session_state.bit_depth = bit_depth
+            st.session_state.normalize_audio = normalize_audio
+            st.session_state.remove_silence = remove_silence
+            st.session_state.chunk_size = chunk_size
+            st.session_state.overlap = overlap
+            st.session_state.window_function = window_function
+            
+            st.success("✅ Audio-Einstellungen gespeichert!")
+            st.rerun()
+
+def render_search_settings():
+    """Render search and similarity settings"""
+    st.header("🔍 Such-Einstellungen")
+    
+    # Current settings
+    current_max_results = st.session_state.get('max_results', default_settings['max_results'])
+    current_threshold = st.session_state.get('similarity_threshold', default_settings['similarity_threshold'])
+    
+    with st.form("search_settings"):
+        st.subheader("Allgemeine Sucheinstellungen")
+        
+        max_results = st.number_input(
+            "Maximale Anzahl Ergebnisse",
+            min_value=10,
+            max_value=500,
+            value=current_max_results,
+            step=10,
+            help="Maximale Anzahl der angezeigten Suchergebnisse"
+        )
+        
+        similarity_threshold = st.slider(
+            "Ähnlichkeits-Schwellenwert",
+            min_value=0.0,
+            max_value=1.0,
+            value=current_threshold,
+            step=0.01,
+            help="Minimale Ähnlichkeit für Suchergebnisse (0.0 = alle, 1.0 = nur identische)"
+        )
+        
+        # Search behavior
+        st.subheader("Suchverhalten")
+        
+        fuzzy_search = st.checkbox(
+            "Fuzzy-Suche aktivieren",
+            value=True,
+            help="Toleriert Tippfehler in der Textsuche"
+        )
+        
+        case_sensitive = st.checkbox(
+            "Groß-/Kleinschreibung beachten",
+            value=False,
+            help="Unterscheidet zwischen Groß- und Kleinbuchstaben"
+        )
+        
+        # Advanced search settings
+        with st.expander("🔧 Erweiterte Sucheinstellungen"):
+            search_timeout = st.number_input(
+                "Such-Timeout (Sekunden)",
+                min_value=5,
+                max_value=120,
+                value=30,
+                help="Maximale Wartezeit für Suchanfragen"
+            )
+            
+            enable_caching = st.checkbox(
+                "Suchergebnis-Caching",
+                value=True,
+                help="Zwischenspeichern von Suchergebnissen für bessere Performance"
+            )
+            
+            cache_duration = st.number_input(
+                "Cache-Dauer (Minuten)",
+                min_value=1,
+                max_value=60,
+                value=10,
+                help="Wie lange Suchergebnisse zwischengespeichert werden"
+            )
+        
+        # Embedding settings
+        st.subheader("Embedding-Einstellungen")
+        
+        embedding_model = st.selectbox(
+            "Embedding-Modell",
+            options=['sentence-transformers', 'openai', 'custom'],
+            help="Modell für die Generierung von Text-Embeddings"
+        )
+        
+        embedding_dimensions = st.number_input(
+            "Embedding-Dimensionen",
+            min_value=128,
+            max_value=1536,
+            value=384,
+            step=64,
+            help="Anzahl der Dimensionen für Embeddings"
+        )
+        
+        if st.form_submit_button("💾 Such-Einstellungen speichern", type="primary"):
+            # Save search settings
+            st.session_state.max_results = max_results
+            st.session_state.similarity_threshold = similarity_threshold
+            st.session_state.fuzzy_search = fuzzy_search
+            st.session_state.case_sensitive = case_sensitive
+            st.session_state.search_timeout = search_timeout
+            st.session_state.enable_caching = enable_caching
+            st.session_state.cache_duration = cache_duration
+            st.session_state.embedding_model = embedding_model
+            st.session_state.embedding_dimensions = embedding_dimensions
+            
+            st.success("✅ Such-Einstellungen gespeichert!")
+            st.rerun()
+
+def render_system_info():
+    """Render system information and diagnostics"""
+    st.header("📊 System-Information")
+    
+    # System status
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        if st.button("🔄 System-Status aktualisieren", use_container_width=True):
+            check_backend_health()
+    
+    with col2:
+        if st.button("📊 Statistiken laden", use_container_width=True):
+            get_system_stats()
+    
+    with col3:
+        if st.button("🧹 Cache leeren", use_container_width=True):
+            clear_cache()
+    
+    # Backend health
+    st.subheader("🏥 Backend-Gesundheit")
+    
+    health_status = st.session_state.get('backend_health', {})
+    
+    if health_status:
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            status = health_status.get('status', 'unknown')
+            color = "🟢" if status == 'healthy' else "🔴" if status == 'unhealthy' else "🟡"
+            st.metric("Status", f"{color} {status.title()}")
+        
+        with col2:
+            uptime = health_status.get('uptime', 'N/A')
+            st.metric("Uptime", uptime)
+        
+        with col3:
+            version = health_status.get('version', 'N/A')
+            st.metric("Version", version)
+        
+        with col4:
+            memory_usage = health_status.get('memory_usage', 'N/A')
+            st.metric("Memory", memory_usage)
+    
+    # System statistics
+    st.subheader("📈 Statistiken")
+    
+    stats = st.session_state.get('system_stats', {})
+    
+    if stats:
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            total_files = stats.get('total_files', 0)
+            st.metric("Gesamt Dateien", total_files)
+        
+        with col2:
+            total_embeddings = stats.get('total_embeddings', 0)
+            st.metric("Embeddings", total_embeddings)
+        
+        with col3:
+            avg_processing_time = stats.get('avg_processing_time', 0)
+            st.metric("Ø Verarbeitungszeit", f"{avg_processing_time:.2f}s")
+        
+        with col4:
+            storage_used = stats.get('storage_used', 'N/A')
+            st.metric("Speicher verwendet", storage_used)
+        
+        # Detailed stats
+        with st.expander("📋 Detaillierte Statistiken"):
+            st.json(stats)
+    
+    # Environment info
+    st.subheader("🌍 Umgebungsinformationen")
+    
+    env_info = {
+        "Python Version": f"{os.sys.version_info.major}.{os.sys.version_info.minor}.{os.sys.version_info.micro}",
+        "Streamlit Version": st.__version__,
+        "Working Directory": os.getcwd(),
+        "Session State Keys": len(st.session_state.keys()),
+        "Backend URL": st.session_state.get('backend_url', 'Not set')
+    }
+    
+    for key, value in env_info.items():
+        col1, col2 = st.columns([1, 2])
+        with col1:
+            st.write(f"**{key}:**")
+        with col2:
+            st.write(value)
+
+def check_backend_health():
+    """Check backend health status"""
+    try:
+        with st.spinner("Prüfe Backend-Gesundheit..."):
+            response = requests.get(f"{backend_url}/health", timeout=10)
+            
             if response.status_code == 200:
-                st.success(f"🟢 Connected to {self.backend_url}")
+                health_data = response.json()
+                st.session_state.backend_health = health_data
+                st.session_state.last_backend_check = time.strftime("%H:%M:%S")
+                st.success("✅ Backend ist gesund!")
             else:
-                st.error(f"🔴 Backend returned status {response.status_code}")
-        except:
-            st.error(f"🔴 Cannot connect to {self.backend_url}")
-    
-    def _check_backend_health(self):
-        """Check backend health status"""
-        try:
-            with st.spinner("Checking backend health..."):
-                # Check main health endpoint
-                response = requests.get(f"{self.backend_url}/health", timeout=10)
+                st.error(f"❌ Backend-Gesundheitsprüfung fehlgeschlagen: {response.status_code}")
                 
-                if response.status_code == 200:
-                    st.success("✅ Backend is healthy!")
-                    
-                    # Check individual service health
-                    services = ['audio', 'search']
-                    
-                    for service in services:
-                        try:
-                            service_response = requests.get(
-                                f"{self.backend_url}/api/v1/{service}/health",
-                                timeout=5
-                            )
-                            if service_response.status_code == 200:
-                                st.success(f"✅ {service.title()} service is healthy")
-                            else:
-                                st.warning(f"⚠️ {service.title()} service returned status {service_response.status_code}")
-                        except:
-                            st.error(f"❌ {service.title()} service is not responding")
-                else:
-                    st.error(f"❌ Backend health check failed! Status: {response.status_code}")
-        except Exception as e:
-            st.error(f"❌ Health check failed: {str(e)}")
-    
-    def _get_system_stats(self):
-        """Get and display system statistics"""
-        try:
-            with st.spinner("Fetching system statistics..."):
-                # Get search stats
-                search_response = requests.get(f"{self.backend_url}/api/v1/search/stats", timeout=10)
+    except Exception as e:
+        st.error(f"❌ Verbindungsfehler: {str(e)}")
+        st.session_state.backend_health = {'status': 'error', 'message': str(e)}
+
+def get_system_stats():
+    """Get system statistics from backend"""
+    try:
+        with st.spinner("Lade Statistiken..."):
+            response = requests.get(f"{backend_url}/api/v1/stats", timeout=10)
+            
+            if response.status_code == 200:
+                stats_data = response.json()
+                st.session_state.system_stats = stats_data
+                st.success("✅ Statistiken geladen!")
+            else:
+                st.error(f"❌ Statistiken konnten nicht geladen werden: {response.status_code}")
                 
-                if search_response.status_code == 200:
-                    stats = search_response.json()
-                    
-                    st.subheader("📊 System Statistics")
-                    
-                    col1, col2, col3, col4 = st.columns(4)
-                    
-                    with col1:
-                        st.metric("Total Files", stats.get('total_files', 0))
-                    
-                    with col2:
-                        st.metric("Total Embeddings", stats.get('total_embeddings', 0))
-                    
-                    with col3:
-                        categories = stats.get('categories', [])
-                        st.metric("Categories", len(categories))
-                    
-                    with col4:
-                        avg_duration = stats.get('avg_duration', 0)
-                        st.metric("Avg Duration", f"{avg_duration:.1f}s" if avg_duration else "N/A")
-                    
-                    # Category breakdown
-                    if categories:
-                        st.subheader("📂 Category Breakdown")
-                        
-                        for cat in categories:
-                            col1, col2, col3 = st.columns([2, 1, 1])
-                            
-                            with col1:
-                                st.write(f"**{cat['category']}**")
-                            
-                            with col2:
-                                st.write(f"{cat['count']} files")
-                            
-                            with col3:
-                                if cat.get('avg_bpm'):
-                                    st.write(f"Avg BPM: {cat['avg_bpm']:.1f}")
-                else:
-                    st.error("Failed to fetch system statistics")
-        except Exception as e:
-            st.error(f"Error fetching system stats: {str(e)}")
+    except Exception as e:
+        st.error(f"❌ Fehler beim Laden der Statistiken: {str(e)}")
+
+def clear_cache():
+    """Clear application cache"""
+    # Clear session state cache items
+    cache_keys = ['search_results', 'filtered_results', 'backend_health', 'system_stats']
+    
+    for key in cache_keys:
+        if key in st.session_state:
+            del st.session_state[key]
+    
+    st.success("✅ Cache geleert!")
+    st.rerun()
+
+def render_appearance_settings():
+    """Render appearance and UI settings"""
+    st.header("🎨 Erscheinungsbild")
+    
+    # Current settings
+    current_theme = st.session_state.get('theme', default_settings['theme'])
+    
+    with st.form("appearance_settings"):
+        st.subheader("Design-Einstellungen")
+        
+        # Theme selection
+        theme = st.selectbox(
+            "Farbschema",
+            options=['light', 'dark', 'auto'],
+            index=['light', 'dark', 'auto'].index(current_theme),
+            help="Wähle das Farbschema der Anwendung"
+        )
+        
+        # Layout settings
+        st.subheader("Layout-Einstellungen")
+        
+        sidebar_state = st.selectbox(
+            "Seitenleiste",
+            options=['expanded', 'collapsed', 'auto'],
+            help="Standard-Zustand der Seitenleiste"
+        )
+        
+        page_width = st.selectbox(
+            "Seitenbreite",
+            options=['wide', 'centered'],
+            help="Layout der Hauptseite"
+        )
+        
+        # Display settings
+        st.subheader("Anzeige-Einstellungen")
+        
+        show_progress_bars = st.checkbox(
+            "Fortschrittsbalken anzeigen",
+            value=True,
+            help="Zeige Fortschrittsbalken bei längeren Operationen"
+        )
+        
+        show_tooltips = st.checkbox(
+            "Tooltips anzeigen",
+            value=True,
+            help="Zeige Hilfe-Tooltips bei UI-Elementen"
+        )
+        
+        animations_enabled = st.checkbox(
+            "Animationen aktivieren",
+            value=True,
+            help="Aktiviere UI-Animationen und Übergänge"
+        )
+        
+        # Advanced appearance settings
+        with st.expander("🔧 Erweiterte Einstellungen"):
+            custom_css = st.text_area(
+                "Benutzerdefiniertes CSS",
+                height=100,
+                help="Füge benutzerdefiniertes CSS hinzu"
+            )
+            
+            font_size = st.selectbox(
+                "Schriftgröße",
+                options=['small', 'medium', 'large'],
+                index=1,
+                help="Grundschriftgröße der Anwendung"
+            )
+        
+        if st.form_submit_button("💾 Erscheinungsbild speichern", type="primary"):
+            # Save appearance settings
+            st.session_state.theme = theme
+            st.session_state.sidebar_state = sidebar_state
+            st.session_state.page_width = page_width
+            st.session_state.show_progress_bars = show_progress_bars
+            st.session_state.show_tooltips = show_tooltips
+            st.session_state.animations_enabled = animations_enabled
+            st.session_state.custom_css = custom_css
+            st.session_state.font_size = font_size
+            
+            st.success("✅ Erscheinungsbild-Einstellungen gespeichert!")
+            st.rerun()
+
+# Main page content
+st.title("⚙️ Settings & Configuration")
+st.markdown("Configure the Neuromorphic Dream Engine application settings.")
+
+# Settings tabs
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    "🔗 Backend", 
+    "🎵 Audio", 
+    "🔍 Search", 
+    "📊 System",
+    "🎨 Appearance"
+])
+
+with tab1:
+    render_backend_settings()
+
+with tab2:
+    render_audio_settings()
+
+with tab3:
+    render_search_settings()
+
+with tab4:
+    render_system_info()
+
+with tab5:
+    render_appearance_settings()
