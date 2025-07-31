@@ -12,7 +12,7 @@ st.set_page_config(
 
 # Initialize session state
 if 'backend_url' not in st.session_state:
-    st.session_state.backend_url = "http://localhost:8508"
+    st.session_state.backend_url = "http://localhost:8000"
 
 if 'search_results' not in st.session_state:
     st.session_state.search_results = None

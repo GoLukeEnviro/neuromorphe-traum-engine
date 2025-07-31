@@ -18,7 +18,7 @@ except ImportError:
     CLAP_AVAILABLE = False
     print("Warning: CLAP module not available, embeddings will be skipped")
 
-from .schemas import (
+from schemas import (
     AudioUploadRequest, 
     AudioProcessingResponse, 
     EmbeddingResponse, 
@@ -39,7 +39,35 @@ class AudioProcessingService:
         # Create directory if it doesn't exist
         self.audio_dir.mkdir(exist_ok=True)
     
-    # CLAP functionality removed for MVP - will be added later
+    def _load_clap_model(self):
+        """Load CLAP model for embedding generation"""
+        if not CLAP_AVAILABLE:
+            raise RuntimeError("CLAP module not available")
+        
+        if self._clap_model is None:
+            self._clap_model = CLAP_Module(enable_fusion=False)
+            self._clap_model.load_ckpt()
+        return self._clap_model
+    
+    async def _generate_clap_embedding(self, audio_path: Path) -> Optional[np.ndarray]:
+        """Generate CLAP embedding for audio file"""
+        try:
+            if not CLAP_AVAILABLE:
+                return None
+            
+            # Load CLAP model if not already loaded
+            if self._clap_model is None:
+                self._clap_model = self._load_clap_model()
+            
+            # Generate embedding directly from file (more reliable)
+            audio_embed = self._clap_model.get_audio_embedding_from_filelist(
+                x=[str(audio_path)], use_tensor=False
+            )
+            
+            return audio_embed[0] if len(audio_embed) > 0 else None
+            
+        except Exception as e:
+            return None
     
     async def save_uploaded_file(self, 
                                 file_content: bytes, 
@@ -95,7 +123,7 @@ class AudioProcessingService:
             return None
     
     async def process_audio_file(self, file_id: str) -> AudioProcessingResponse:
-        """Process audio file (simplified for MVP - no CLAP embedding)"""
+        """Process audio file and generate CLAP embedding"""
         start_time = time.time()
         
         try:
@@ -111,13 +139,26 @@ class AudioProcessingService:
                 )
             
             file_path = audio_files[0]
+            
+            # Generate CLAP embedding
+            embedding = await self._generate_clap_embedding(file_path)
+            
             processing_time = time.time() - start_time
+            
+            if embedding is not None:
+                # Save embedding to file for later retrieval
+                embedding_path = self.audio_dir / f"{file_id}_embedding.npy"
+                np.save(embedding_path, embedding)
+                
+                message = f"Audio processed successfully in {processing_time:.2f}s with CLAP embedding ({embedding.shape[0]} dimensions)"
+            else:
+                message = f"Audio uploaded in {processing_time:.2f}s (CLAP embedding failed)"
             
             return AudioProcessingResponse(
                 id=file_id,
                 filename=file_path.name,
                 status=ProcessingStatus.COMPLETED,
-                message=f"Audio uploaded successfully in {processing_time:.2f}s (CLAP processing skipped in MVP)",
+                message=message,
                 created_at=datetime.now()
             )
             
@@ -130,11 +171,16 @@ class AudioProcessingService:
                 created_at=datetime.now()
             )
     
-    # CLAP embedding generation removed for MVP
-    
     async def get_embedding(self, file_id: str) -> Optional[np.ndarray]:
-        """Load embedding for file ID - not available in MVP"""
-        return None
+        """Load CLAP embedding for file ID"""
+        try:
+            embedding_path = self.audio_dir / f"{file_id}_embedding.npy"
+            if embedding_path.exists():
+                return np.load(embedding_path)
+            return None
+        except Exception as e:
+            print(f"Error loading embedding for {file_id}: {e}")
+            return None
     
     async def list_audio_files(self) -> List[str]:
         """List all audio file IDs"""

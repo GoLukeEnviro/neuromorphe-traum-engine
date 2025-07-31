@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse
 
 from .service import AudioProcessingService
 from .dependencies import get_audio_service
-from .schemas import (
+from schemas import (
     AudioUploadRequest,
     AudioProcessingResponse,
     EmbeddingResponse,

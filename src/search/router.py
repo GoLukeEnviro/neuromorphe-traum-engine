@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse
 
 from .service import SearchService
 from .dependencies import get_search_service
-from .schemas import (
+from schemas import (
     SearchRequest,
     SearchResponse,
     SimilarityRequest,

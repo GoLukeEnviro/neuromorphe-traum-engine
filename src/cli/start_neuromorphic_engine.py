@@ -11,7 +11,7 @@ import subprocess
 from pathlib import Path
 import importlib.util
 
-from ..core.config import settings
+from core.config import settings
 
 
 def check_dependencies():

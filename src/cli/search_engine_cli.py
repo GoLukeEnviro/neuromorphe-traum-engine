@@ -17,8 +17,8 @@ from typing import List, Tuple, Dict
 import logging
 from pathlib import Path
 
-from ...services.search import SearchService
-from ...schemas.stem import SearchResult, Stem
+from services.search import SearchService
+from schemas.stem import SearchResult, Stem
 
 # Logging-Konfiguration
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')

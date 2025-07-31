@@ -7,6 +7,14 @@ Erstellt drei synthetische Audiodateien für die Kategorisierungstests.
 import numpy as np
 import soundfile as sf
 import os
+import sys
+import io
+
+# Encoding für stdout und stderr setzen
+if sys.stdout.encoding != 'utf-8':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+if sys.stderr.encoding != 'utf-8':
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 def create_test_audio_files():
     """
@@ -22,7 +30,7 @@ def create_test_audio_files():
     
     # Audio-Parameter
     sample_rate = 44100
-    duration = 2.0  # 2 Sekunden
+    duration = 1.0  # 1 Sekunde
     t = np.linspace(0, duration, int(sample_rate * duration))
     
     # 1. Kick-Drum Sample: Kurzer perkussiver Sound mit tiefem Thump
@@ -61,21 +69,21 @@ def create_test_audio_files():
     kick_path = os.path.join(output_dir, "test_kick_sample.wav")
     sf.write(kick_path, kick_final, sample_rate)
     files_created.append(kick_path)
-    print(f"✓ Erstellt: {kick_path}")
+    print(f"[OK] Erstellt: {kick_path}")
     
     # Bass-Line
     bass_path = os.path.join(output_dir, "test_bass_line.wav")
     sf.write(bass_path, bass_final, sample_rate)
     files_created.append(bass_path)
-    print(f"✓ Erstellt: {bass_path}")
+    print(f"[OK] Erstellt: {bass_path}")
     
     # Melodischer Loop
     loop_path = os.path.join(output_dir, "test_loop_melody.wav")
     sf.write(loop_path, melody_final, sample_rate)
     files_created.append(loop_path)
-    print(f"✓ Erstellt: {loop_path}")
+    print(f"[OK] Erstellt: {loop_path}")
     
-    print(f"\n🎵 {len(files_created)} Test-Audiodateien erfolgreich erstellt!")
+    print(f"\n{len(files_created)} Test-Audiodateien erfolgreich erstellt!")
     print("Bereit für AGENTEN_DIREKTIVE_003 Tests.")
     
     return files_created

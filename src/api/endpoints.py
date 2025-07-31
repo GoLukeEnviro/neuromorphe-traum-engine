@@ -14,10 +14,10 @@ from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
-from ..database.database import get_db
-from ..database import crud
-from ..database.models import Stem, GeneratedTrack, ProcessingJob
-from ..schemas.schemas import (
+from database.database import get_db
+from database import crud
+from database.models import Stem, GeneratedTrack, ProcessingJob
+from schemas.schemas import (
     # Stem schemas
     StemResponse, StemCreate, StemUpdate, StemSearchRequest, SearchResponse,
     # Track schemas
@@ -28,12 +28,12 @@ from ..schemas.schemas import (
     HealthResponse, StatisticsResponse, SuccessResponse, ErrorResponse,
     PreprocessRequest, ValidationResult, PaginationParams, PaginatedResponse
 )
-from ..services.preprocessor import PreprocessorService
-from ..services.arranger import ArrangerService
-from ..services.live_player_service import LivePlayerService
-from ..services.neuro_analyzer import NeuroAnalyzer
-from ..core.config import settings
-from ..core.logging import get_logger
+from services.preprocessor import PreprocessorService
+from services.arranger import ArrangerService
+from services.live_player_service import LivePlayerService
+from services.neuro_analyzer import NeuroAnalyzer
+from core.config import settings
+from core.logging import get_logger
 
 # Router-Instanzen
 api_router = APIRouter()

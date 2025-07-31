@@ -6,8 +6,8 @@
 import asyncio
 from pathlib import Path
 
-from ...database.service import DatabaseService
-from ...core.config import settings
+from database.service import DatabaseService
+from core.config import settings
 
 async def check_database_paths():
     """

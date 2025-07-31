@@ -183,7 +183,7 @@ if 'uploaded_files' in st.session_state and st.session_state.uploaded_files:
                 if st.button(f"🔍 Search Similar", key=f"search_{upload['file_id']}"):
                     # Set search parameters and switch to search page
                     st.session_state.search_file_id = upload['file_id']
-                    st.switch_page("search")
+                    st.switch_page("pages/search.py")
 else:
     st.info("No files uploaded yet. Upload some audio files to get started!")
 

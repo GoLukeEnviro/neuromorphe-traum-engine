@@ -8,8 +8,8 @@ import numpy as np
 import logging
 import asyncio
 
-from ...database.service import DatabaseService
-from ...database.models import Stem
+from database.service import DatabaseService
+from database.models import Stem
 
 # Logging-Konfiguration
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')

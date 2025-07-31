@@ -4,7 +4,7 @@ import threading
 import time
 import librosa
 from typing import Dict, Any, List
-from ..database.service import DatabaseService
+from database.service import DatabaseService
 
 class LivePlayerService:
     """

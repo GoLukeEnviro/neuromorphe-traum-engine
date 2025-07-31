@@ -1,12 +1,19 @@
 """Schema-Module für die Neuromorphe Traum-Engine."""
 
-from .schemas import *
 from .stem import *
 from .base import TimestampMixin
-from .api import SearchRequest
-
+from .api import *
 from .render import RenderOutput
 from .websocket import ClientInfo
+
+# Audio schemas
+from audio.schemas import (
+    AudioUploadRequest,
+    AudioProcessingResponse,
+    EmbeddingResponse,
+    AudioFileInfo,
+    ProcessingStatus
+)
 
 __all__ = [
     # From base.py

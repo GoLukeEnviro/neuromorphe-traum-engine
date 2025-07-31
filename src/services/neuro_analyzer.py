@@ -21,7 +21,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
 
-from core.config import settings
+from ..core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +96,7 @@ class CLAPEmbedder:
         except Exception as e:
             logger.error(f"Fehler bei Audio-Embedding: {e}")
             raise
-    
+ 
     def get_text_embedding(self, text: str) -> np.ndarray:
         """Erstellt Text-Embedding mit CLAP"""
         if not self.is_loaded:
@@ -245,6 +245,13 @@ class PatternAnalyzer:
         self.window_size = 2048
         self.hop_length = 512
         
+    def _smooth(self, data: np.ndarray, window_length: int) -> np.ndarray:
+        """Glättet ein Signal mit einem gleitenden Durchschnitt."""
+        if window_length <= 1:
+            return data
+        window = np.ones(window_length) / window_length
+        return np.convolve(data, window, mode='valid')
+
     def analyze_patterns(self, audio: np.ndarray, sample_rate: int) -> Dict[str, Any]:
         """Analysiert Muster und Strukturen im Audio"""
         logger.debug("Starte Pattern-Analyse")
@@ -326,7 +333,7 @@ class PatternAnalyzer:
         
         # Envelope-Analyse
         envelope = np.abs(audio)
-        envelope_smooth = librosa.util.smooth(envelope, length=sample_rate // 10)
+        envelope_smooth = self._smooth(envelope, window_length=sample_rate // 10)
         
         # Attack/Decay-Charakteristiken
         diff_envelope = np.diff(envelope_smooth)

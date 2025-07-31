@@ -1,6 +1,6 @@
 from fastapi import APIRouter
-from ..audio.router import router as audio_router
-from ..search.router import router as search_router
+from audio.router import router as audio_router
+from search.router import router as search_router
 
 # Create main API router
 api_router = APIRouter(prefix="/api/v1")

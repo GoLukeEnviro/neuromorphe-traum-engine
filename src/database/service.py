@@ -5,7 +5,7 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import text
+from sqlalchemy import text, select
 
 from database.database import get_async_db_session
 from database.crud import StemCRUD, GeneratedTrackCRUD, ProcessingJobCRUD, SystemMetricsCRUD, ConfigurationCRUD
@@ -23,14 +23,20 @@ class DatabaseService:
         # No direct sqlite3 connection here, rely on SQLAlchemy session
         pass
     
-    
-    
     # New methods for stems table
     async def insert_stem(self, stem_data: StemCreate) -> Optional[Stem]:
         """Insert new stem record using SQLAlchemy"""
         async with get_async_db_session() as session:
             return StemCRUD.create_stem(session, stem_data.dict())
     
+    async def get_stem_by_hash(self, file_hash: str) -> Optional[Stem]:
+        """Holt einen Stem anhand seines Hashes."""
+        async with get_async_db_session() as session:
+            result = await session.execute(
+                select(Stem).where(Stem.file_hash == file_hash)
+            )
+            return result.scalars().first()
+
     async def get_stems_by_category(self, category: str, source: Optional[str] = None, limit: int = 50) -> List[Stem]:
         """Get stems by category and optionally by source using SQLAlchemy"""
         async with get_async_db_session() as session:

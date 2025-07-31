@@ -9,8 +9,8 @@ from collections import Counter
 from pathlib import Path
 from typing import List, Dict, Any
 
-from ...database.service import DatabaseService
-from ...database.models import Stem
+from database.service import DatabaseService
+from database.models import Stem
 
 async def analyze_techno_beats():
     """

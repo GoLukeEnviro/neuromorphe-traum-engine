@@ -18,7 +18,7 @@ from typing import Optional
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from ..core.config import settings
+from core.config import settings
 from core.logging import setup_logging, get_logger
 from database.database import get_database_manager, init_database
 from services.preprocessor import PreprocessorService
@@ -130,8 +130,8 @@ async def setup_database(force: bool = False):
         await db_manager.create_tables()
         
         # Basis-Konfiguration einfügen
-        from ..database.crud import ConfigurationCRUD
-from ..schemas.schemas import ConfigurationSettingCreate
+        from database.crud import ConfigurationCRUD
+from schemas.schemas import ConfigurationSettingCreate
         
         async with db_manager.get_async_session() as session:
             

@@ -13,6 +13,7 @@ import json
 import hashlib
 from datetime import datetime
 
+import shutil
 import librosa
 import numpy as np
 from scipy import signal
@@ -21,7 +22,7 @@ from scipy import signal
 
 from schemas.stem import StemCreate
 from core.config import settings
-from services.neuro_analyzer import NeuroAnalyzer
+from .neuro_analyzer import NeuroAnalyzer
 from database.service import DatabaseService
 from database.models import Stem
 
@@ -126,8 +127,13 @@ class AudioAnalyzer:
     
     def _analyze_spectral_features(self, audio: np.ndarray, sr: int) -> Dict[str, Any]:
         """Analysiert spektrale Eigenschaften"""
+        # Dynamische FFT-Anpassung
+        n_fft = min(1024, len(audio))
+        if n_fft < 256:
+            n_fft = 256  # Minimum sicherstellen
+
         # STFT berechnen
-        stft = librosa.stft(audio, hop_length=self.hop_length, n_fft=self.frame_length)
+        stft = librosa.stft(audio, hop_length=self.hop_length, n_fft=n_fft)
         magnitude = np.abs(stft)
         
         # Spektrale Features
@@ -364,7 +370,7 @@ class AudioAnalyzer:
             best_key = 'C'
         
         return best_key, best_correlation
-
+ 
 
 class TagGenerator:
     """Klasse für automatische Tag-Generierung"""
@@ -472,14 +478,18 @@ class PreprocessorService:
         logger.info(f"Starte Verarbeitung von: {file_path}")
         
         try:
-            # Prüfe ob Datei bereits verarbeitet wurde
-            existing_stem = await self._check_existing_stem(file_path)
+            # Audio-Hash für Duplikatsprüfung
+            audio_content, _ = librosa.load(file_path, sr=22050, mono=True)
+            file_hash = hashlib.md5(audio_content.tobytes()).hexdigest()
+
+            # Korrigierte Datenbankinteraktion
+            existing_stem = await self.db_service.get_stem_by_hash(file_hash)
             if existing_stem:
-                logger.info(f"Datei bereits verarbeitet: {existing_stem['name']}")
+                logger.info(f"Überspringe {file_path}: bereits vorhanden")
                 return {
                     'success': True,
                     'action': 'skipped',
-                    'stem_id': existing_stem['id'],
+                    'stem_id': existing_stem.id,
                     'message': 'Datei bereits in Datenbank'
                 }
             
@@ -586,7 +596,8 @@ class PreprocessorService:
         try:
             if not target_path.exists():
                 # In Produktion: shutil.copy2(source_path, target_path)
-                target_path.write_text(f"Processed: {source_path}")
+# target_path.write_text(f"Processed: {source_path}")
+                shutil.copy2(source_path, target_path)
             
             return str(target_path)
             

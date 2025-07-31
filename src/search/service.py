@@ -7,7 +7,7 @@ from laion_clap import CLAP_Module
 from sklearn.metrics.pairwise import cosine_similarity
 from concurrent.futures import ThreadPoolExecutor
 
-from .schemas import (
+from schemas import (
     SearchRequest,
     SearchResult,
     SearchResponse,
@@ -15,7 +15,7 @@ from .schemas import (
     CategoryStats,
     SearchStats
 )
-from ..database.service import DatabaseService
+from database.service import DatabaseService
 
 
 class SearchService:
