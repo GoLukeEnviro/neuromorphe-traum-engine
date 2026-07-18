@@ -2,7 +2,6 @@ import logging
 import numpy as np
 from typing import List, Dict, Optional, Tuple
 from sqlalchemy.orm import Session
-from laion_clap import CLAP_Module
 import json
 
 from database.service import DatabaseService
@@ -26,6 +25,8 @@ class SearchService:
     def _load_clap_model(self):
         """Load the LAION-CLAP model"""
         try:
+            from laion_clap import CLAP_Module
+
             logger.info("Loading LAION-CLAP model...")
             self.clap_model = CLAP_Module(enable_fusion=False)
             self.clap_model.load_ckpt()
@@ -143,4 +144,3 @@ class SearchService:
         except Exception as e:
             logger.error(f"Error calculating cosine similarity: {e}")
             return 0.0
-

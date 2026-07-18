@@ -162,6 +162,10 @@ cython_debug/
 .vscode/
 
 # Project-specific ignores
+.claude/plans/
+node_modules/
+processed_database/*
+!processed_database/.gitkeep
 
 # Data directories
 data/

@@ -1,13 +1,12 @@
 import time
 import asyncio
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 from pathlib import Path
 import numpy as np
-from laion_clap import CLAP_Module
 from sklearn.metrics.pairwise import cosine_similarity
 from concurrent.futures import ThreadPoolExecutor
 
-from schemas import (
+from .schemas import (
     SearchRequest,
     SearchResult,
     SearchResponse,
@@ -30,7 +29,7 @@ class SearchService:
         self._executor = ThreadPoolExecutor(max_workers=2)
         self.db_service = DatabaseService()
     
-    async def get_clap_model(self) -> CLAP_Module:
+    async def get_clap_model(self) -> Any:
         """Lazy loading of CLAP model"""
         if self._clap_model is None:
             loop = asyncio.get_event_loop()
@@ -40,8 +39,10 @@ class SearchService:
             )
         return self._clap_model
     
-    def _load_clap_model(self) -> CLAP_Module:
+    def _load_clap_model(self) -> Any:
         """Load CLAP model in thread pool"""
+        from laion_clap import CLAP_Module
+
         model = CLAP_Module(enable_fusion=False)
         model.load_ckpt(self.model_version)
         return model
@@ -110,7 +111,7 @@ class SearchService:
         except Exception as e:
             raise Exception(f"Search failed: {str(e)}")
     
-    def _generate_text_embedding(self, model: CLAP_Module, text: str) -> np.ndarray:
+    def _generate_text_embedding(self, model: Any, text: str) -> np.ndarray:
         """Generate CLAP embedding for text query"""
         text_embed = model.get_text_embedding([text], use_tensor=False)
         return text_embed[0]  # Return first (and only) embedding

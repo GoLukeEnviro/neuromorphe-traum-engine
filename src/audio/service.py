@@ -10,14 +10,6 @@ import librosa
 import soundfile as sf
 from concurrent.futures import ThreadPoolExecutor
 
-# CLAP import is optional for MVP
-try:
-    from laion_clap import CLAP_Module
-    CLAP_AVAILABLE = True
-except ImportError:
-    CLAP_AVAILABLE = False
-    print("Warning: CLAP module not available, embeddings will be skipped")
-
 from schemas import (
     AudioUploadRequest, 
     AudioProcessingResponse, 
@@ -41,9 +33,11 @@ class AudioProcessingService:
     
     def _load_clap_model(self):
         """Load CLAP model for embedding generation"""
-        if not CLAP_AVAILABLE:
-            raise RuntimeError("CLAP module not available")
-        
+        try:
+            from laion_clap import CLAP_Module
+        except ImportError as exc:
+            raise RuntimeError("CLAP module not available") from exc
+
         if self._clap_model is None:
             self._clap_model = CLAP_Module(enable_fusion=False)
             self._clap_model.load_ckpt()
@@ -52,9 +46,6 @@ class AudioProcessingService:
     async def _generate_clap_embedding(self, audio_path: Path) -> Optional[np.ndarray]:
         """Generate CLAP embedding for audio file"""
         try:
-            if not CLAP_AVAILABLE:
-                return None
-            
             # Load CLAP model if not already loaded
             if self._clap_model is None:
                 self._clap_model = self._load_clap_model()
