@@ -16,7 +16,7 @@ import time
 import traceback
 from dataclasses import dataclass
 from enum import Enum
-USE_REAL_CLAP = os.environ.get("USE_REAL_CLAP", "0") == "1"
+USE_REAL_CLAP = os.environ.get("USE_REAL_CLAP", "1") == "1"
 try:
     if USE_REAL_CLAP:
         from laion_clap import CLAP_Module as _RealCLAP_Module

@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     PERFORMANCE_TRACKING: bool = False
     
     # Database
-    DATABASE_URL: str = "sqlite:///E:/VS-code-Projekte-5.2025/neuromorphe-traum-engine/processed_database/stems_new.db"
+    DATABASE_URL: str = "sqlite:///processed_database/stems.db"
     DATABASE_ECHO: bool = False
     ENABLE_DATABASE_MONITORING: bool = False
     SLOW_QUERY_THRESHOLD: float = 0.5
@@ -46,13 +46,34 @@ class Settings(BaseSettings):
     CLAP_MODEL_NAME: str = "laion/larger_clap_music_and_speech"
     
     # API
-    CORS_ORIGINS: List[str] = ["http://localhost:8501"]
+    CORS_ORIGINS: List[str] = [
+        "http://localhost:8501",
+        "http://localhost:3000",
+    ]
 
     @field_validator("CORS_ORIGINS", mode="before")
     def split_cors_origins(cls, v):
         if isinstance(v, str):
             return [item.strip() for item in v.split(",")]
         return v
+
+    @field_validator("LOG_LEVEL")
+    @classmethod
+    def validate_log_level(cls, value: str) -> str:
+        """Accept only standard Python logging levels."""
+        normalized = value.upper()
+        allowed_levels = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+        if normalized not in allowed_levels:
+            raise ValueError(f"Unsupported log level: {value}")
+        return normalized
+
+    @field_validator("MAX_FILE_SIZE")
+    @classmethod
+    def validate_max_file_size(cls, value: int) -> int:
+        """File-size limits must be positive."""
+        if value <= 0:
+            raise ValueError("MAX_FILE_SIZE must be greater than zero")
+        return value
 
     def get_logs_path(self) -> Path:
         """Gibt den Pfad zum Log-Verzeichnis zurück."""

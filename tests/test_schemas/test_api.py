@@ -16,7 +16,8 @@ from schemas.api import (
 from schemas.websocket import (
     WebSocketMessage, NotificationMessage
 )
-from exceptions import ValidationError
+from pydantic import ValidationError
+from schemas.api import RateLimitInfo, CacheInfo, MetricsInfo
 
 
 class TestAPIResponse:

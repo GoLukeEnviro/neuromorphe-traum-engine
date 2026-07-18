@@ -80,7 +80,8 @@ class TestBaseException:
             )
         
         assert neuromorphe_error.original_exception is original_error
-        assert "ValueError: Original error" in str(neuromorphe_error.original_exception)
+        assert str(neuromorphe_error.original_exception) == "Original error"
+        assert "ValueError: Original error" in neuromorphe_error.to_dict()["traceback"]
 
 
 class TestConfigurationError:

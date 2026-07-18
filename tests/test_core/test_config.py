@@ -47,7 +47,8 @@ class TestSettings:
     @pytest.mark.unit
     def test_settings_defaults(self):
         """Test: Settings-Standardwerte"""
-        settings = Settings() # Load defaults
+        with patch.dict(os.environ, {}, clear=True):
+            settings = Settings(_env_file=None)  # Load class defaults only
 
         assert settings.PROJECT_NAME == "Neuromorphe Traum-Engine v2.0"
         assert settings.DEBUG is False
@@ -96,35 +97,30 @@ LOG_LEVEL="ERROR"
         with open(env_file_path, "w") as f:
             f.write(env_content)
 
-        # Temporarily change the working directory to where the .env file is
-        original_cwd = os.getcwd()
-        os.chdir(temp_dir)
-        try:
-            settings = Settings() # Load from .env in current dir
+        with patch.dict(os.environ, {}, clear=True):
+            settings = Settings(_env_file=env_file_path)
             assert settings.PROJECT_NAME == "File Test"
             assert settings.DEBUG is False
             assert settings.DATABASE_URL == "sqlite:///file_db.db"
             assert settings.AUDIO_SAMPLE_RATE == 44100
             assert settings.CLAP_MODEL_NAME == "file-model"
             assert settings.LOG_LEVEL == "ERROR"
-        finally:
-            os.chdir(original_cwd) # Change back
 
     @pytest.mark.unit
     def test_settings_validation(self):
         """Test: Settings-Validierung"""
         # Invalid LOG_LEVEL
         with pytest.raises(ValueError): # Pydantic raises ValueError for invalid enums/types
-            Settings(LOG_LEVEL="INVALID_LEVEL")
+            Settings(LOG_LEVEL="INVALID_LEVEL", _env_file=None)
 
         # Invalid MAX_FILE_SIZE (e.g., negative)
         with pytest.raises(ValueError):
-            Settings(MAX_FILE_SIZE=-100)
+            Settings(MAX_FILE_SIZE=-100, _env_file=None)
 
     @pytest.mark.unit
     def test_get_logs_path(self):
         """Test: get_logs_path Methode"""
-        settings = Settings()
+        settings = Settings(_env_file=None)
         logs_path = settings.get_logs_path()
         assert logs_path == Path("./logs")
         assert isinstance(logs_path, Path)
@@ -141,15 +137,12 @@ LOG_LEVEL="ERROR"
         os.environ["PROJECT_NAME"] = "EnvVarProject"
         os.environ["LOG_LEVEL"] = "CRITICAL"
 
-        original_cwd = os.getcwd()
-        os.chdir(temp_dir)
         try:
-            settings = Settings() # Load from env, then .env, then defaults
+            settings = Settings(_env_file=env_file_path)
             assert settings.PROJECT_NAME == "EnvVarProject" # Env var has highest priority
             assert settings.DEBUG is True # .env has higher priority than default
             assert settings.LOG_LEVEL == "CRITICAL" # Env var has highest priority
         finally:
-            os.chdir(original_cwd)
             del os.environ["PROJECT_NAME"]
             del os.environ["LOG_LEVEL"]
 

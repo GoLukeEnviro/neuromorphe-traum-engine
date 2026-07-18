@@ -12,7 +12,7 @@ import pickle
 import torch
 import numpy as np
 from tqdm import tqdm
-USE_REAL_CLAP = os.environ.get("USE_REAL_CLAP", "0") == "1"
+USE_REAL_CLAP = os.environ.get("USE_REAL_CLAP", "1") == "1"
 try:
     if USE_REAL_CLAP:
         import laion_clap
