@@ -6,7 +6,7 @@ import asyncio
 import os
 import tempfile
 from typing import AsyncGenerator, Generator, List
-from unittest.mock import MagicMock, patch, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -91,6 +91,12 @@ async def db_session(db_engine):
     async with db_engine.begin() as connection:
         async with AsyncSession(bind=connection) as session:
             yield session
+
+
+@pytest.fixture
+async def test_db_session(db_session):
+    """Alias für Tests, die den historischen Fixture-Namen nutzen"""
+    yield db_session
 
 
 @pytest.fixture(scope="function")

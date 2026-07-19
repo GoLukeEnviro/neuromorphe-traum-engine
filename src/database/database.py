@@ -25,12 +25,16 @@ from core.logging import get_logger
 from database.models import Base
 
 
-async def create_tables(engine: AsyncEngine):
+async def create_tables(engine: Optional[AsyncEngine] = None):
+    if engine is None:
+        engine = get_database_manager().async_engine
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
 
-async def drop_tables(engine: AsyncEngine):
+async def drop_tables(engine: Optional[AsyncEngine] = None):
+    if engine is None:
+        engine = get_database_manager().async_engine
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
 
@@ -473,13 +477,6 @@ def get_db():
 
 
 # Hilfsfunktionen
-async def create_tables():
-    """Tabellen erstellen (Legacy-Kompatibilität)"""
-    db_manager = get_database_manager()
-    await db_manager.create_tables()
-    logger.info("Database tables created")
-
-
 async def init_database():
     """Datenbank initialisieren"""
     await create_tables()
