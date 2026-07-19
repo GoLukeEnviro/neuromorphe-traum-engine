@@ -1,0 +1,4 @@
+[flake8]
+max-line-length = 100
+per-file-ignores =
+    ai_agents/prepare_dataset_sql.py: E301,E302,E305,E501,E128,W291,W292,W293,F541
