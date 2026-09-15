@@ -223,6 +223,22 @@ class SeparationService:
         except Exception as e:
             logger.warning(f"Fehler beim Aufräumen temporärer Dateien: {e}")
     
+    def cleanup(self) -> None:
+        """Ressourcen freigeben: Thread-Pool herunterfahren, Temp-Dateien räumen.
+
+        Symmetrisch zu den übrigen Services, damit Aufrufer einheitlich
+        ``service.cleanup()`` nutzen können.
+        """
+        try:
+            if hasattr(self, "executor"):
+                self.executor.shutdown(wait=False)
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"Fehler beim Herunterfahren des Executors: {e}")
+        try:
+            self.cleanup_temp_files(older_than_hours=0)
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"Fehler beim Aufräumen: {e}")
+
     def __del__(self):
         """Cleanup beim Zerstören der Instanz"""
         if hasattr(self, 'executor'):
