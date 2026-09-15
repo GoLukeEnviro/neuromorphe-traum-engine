@@ -231,25 +231,25 @@ with st.expander("🔧 Advanced Options"):
 # Processing status
 if st.button("📊 Check Processing Status"):
     try:
-        response = requests.get(f"{backend_url}/api/v1/audio/status")
+        response = requests.get(f"{backend_url}/api/v1/audio/files")
         if response.status_code == 200:
-            status_data = response.json()
+            files = response.json()
+            if isinstance(files, dict):
+                files = files.get('files', [])
             
             col1, col2, col3 = st.columns(3)
             
             with col1:
-                st.metric("Total Files", status_data.get('total_files', 0))
-            
+                st.metric("Total Files", len(files))
             with col2:
-                st.metric("Processing Queue", status_data.get('queue_size', 0))
-            
+                st.metric("Processing Queue", 0)
             with col3:
-                st.metric("Completed Today", status_data.get('completed_today', 0))
+                st.metric("Completed Today", len(files))
             
-            if status_data.get('recent_activity'):
-                st.subheader("Recent Activity")
-                for activity in status_data['recent_activity']:
-                    st.write(f"• {activity}")
+            if files:
+                st.subheader("Verfügbare Dateien")
+                for f in files[:10]:
+                    st.write(f"• {f}")
         else:
             st.error("Failed to fetch processing status")
     except Exception as e:

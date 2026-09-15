@@ -368,7 +368,7 @@ def find_similar_to_file(file_id: str):
                 'threshold': 0.5
             }
             
-            response = requests.get(f"{backend_url}/api/v1/search/similar", params=params, timeout=30)
+            response = requests.get(f"{backend_url}/api/v1/search/similar/{file_id}", params=params, timeout=30)
             
             if response.status_code == 200:
                 results = response.json()

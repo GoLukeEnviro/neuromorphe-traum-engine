@@ -14,7 +14,7 @@ supported_formats = st.session_state.get('supported_formats', ['wav', 'mp3', 'fl
 def check_backend_connection() -> bool:
     """Check if backend is reachable"""
     try:
-        response = requests.get(f"{backend_url}/health", timeout=5)
+        response = requests.get(f"{backend_url}/system/health", timeout=5)
         return response.status_code == 200
     except Exception:
         return False
@@ -54,7 +54,7 @@ def upload_audio_file(file_data: bytes, filename: str, metadata: Dict[str, Any] 
 def get_backend_stats() -> Dict[str, Any]:
     """Get backend statistics"""
     try:
-        response = requests.get(f"{backend_url}/api/v1/stats", timeout=10)
+        response = requests.get(f"{backend_url}/api/v1/search/stats", timeout=10)
         if response.status_code == 200:
             return response.json()
         else:

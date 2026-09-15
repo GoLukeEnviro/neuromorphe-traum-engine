@@ -21,7 +21,7 @@ default_settings = {
 def test_backend_connection(url: str, timeout: int = 30) -> Dict[str, Any]:
     """Test backend connection"""
     try:
-        response = requests.get(f"{url}/health", timeout=timeout)
+        response = requests.get(f"{url}/system/health", timeout=timeout)
         if response.status_code == 200:
             return {
                 'status': 'success',
@@ -44,7 +44,7 @@ def test_backend_connection(url: str, timeout: int = 30) -> Dict[str, Any]:
 def get_backend_stats() -> Dict[str, Any]:
     """Get backend statistics"""
     try:
-        response = requests.get(f"{backend_url}/api/v1/stats", timeout=10)
+        response = requests.get(f"{backend_url}/api/v1/search/stats", timeout=10)
         if response.status_code == 200:
             return response.json()
         else:
@@ -53,9 +53,9 @@ def get_backend_stats() -> Dict[str, Any]:
         return {}
 
 def get_api_info() -> Dict[str, Any]:
-    """Get API information"""
+    """Get API information (leitet auf den Health-Endpunkt um)."""
     try:
-        response = requests.get(f"{backend_url}/api/v1/info", timeout=10)
+        response = requests.get(f"{backend_url}/system/health", timeout=10)
         if response.status_code == 200:
             return response.json()
         else:
@@ -163,7 +163,7 @@ def render_endpoints_overview():
         {"method": "POST", "path": "/api/v1/audio/upload", "description": "Audio-Datei hochladen"},
         {"method": "POST", "path": "/api/v1/search/text", "description": "Textbasierte Suche"},
         {"method": "POST", "path": "/api/v1/search/similar", "description": "Ähnlichkeitssuche"},
-        {"method": "GET", "path": "/api/v1/stats", "description": "Backend-Statistiken"}
+        {"method": "GET", "path": "/api/v1/search/stats", "description": "Backend-Statistiken"}
     ]
     
     for endpoint in endpoints:
@@ -479,7 +479,7 @@ def check_backend_health():
     """Check backend health status"""
     try:
         with st.spinner("Prüfe Backend-Gesundheit..."):
-            response = requests.get(f"{backend_url}/health", timeout=10)
+            response = requests.get(f"{backend_url}/system/health", timeout=10)
             
             if response.status_code == 200:
                 health_data = response.json()
@@ -497,7 +497,7 @@ def get_system_stats():
     """Get system statistics from backend"""
     try:
         with st.spinner("Lade Statistiken..."):
-            response = requests.get(f"{backend_url}/api/v1/stats", timeout=10)
+            response = requests.get(f"{backend_url}/api/v1/search/stats", timeout=10)
             
             if response.status_code == 200:
                 stats_data = response.json()

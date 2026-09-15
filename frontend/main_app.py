@@ -69,7 +69,7 @@ class NeuroMorphApp:
         """Get system statistics from backend"""
         try:
             response = requests.get(
-                f"{st.session_state.backend_url}/api/v1/stems/stats",
+                f"{st.session_state.backend_url}/api/v1/search/stats",
                 timeout=5
             )
             if response.status_code == 200:

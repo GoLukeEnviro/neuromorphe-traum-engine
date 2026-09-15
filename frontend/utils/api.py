@@ -35,22 +35,35 @@ def search_stems(
     min_similarity: float = 0.0,
     bpm_range: Optional[tuple] = None
 ) -> List[Dict[str, Any]]:
-    """Search stems using the backend API"""
+    """Search stems using the backend API.
+
+    Nutzt die semantische Suche unter /api/v1/search/text. Die Antwort ist ein
+    SearchResponse-Objekt; für die Anzeige wird die Ergebnisliste extrahiert.
+    """
     try:
         backend_url = get_backend_url()
-        params = {"prompt": query, "top_k": top_k}
-        
+        params = {"query": query, "limit": top_k}
+
         if category:
             params["category"] = category
-        if min_similarity > 0:
-            params["min_similarity"] = min_similarity
-        if bmp_range:
-            params["min_bpm"] = bpm_range[0]
-            params["max_bpm"] = bpm_range[1]
-        
-        response = requests.get(f"{backend_url}/api/v1/stems/search/", params=params)
+        if bpm_range:
+            params["bpm_min"] = bpm_range[0]
+            params["bpm_max"] = bpm_range[1]
+
+        response = requests.get(f"{backend_url}/api/v1/search/text", params=params)
         if response.status_code == 200:
-            return response.json()
+            data = response.json()
+            # SearchResponse -> Liste der Treffer
+            if isinstance(data, dict):
+                results = data.get("results", [])
+            else:
+                results = data
+            if min_similarity > 0:
+                results = [
+                    r for r in results
+                    if r.get("similarity_score", 0) >= min_similarity
+                ]
+            return results
         else:
             st.error(f"API Error: {response.status_code} - {response.text}")
             return []
@@ -87,14 +100,23 @@ def get_stem_by_id(stem_id: str) -> Optional[Dict[str, Any]]:
         return None
 
 def upload_audio_file(file_data: bytes, filename: str, metadata: Dict[str, Any] = None) -> Dict[str, Any]:
-    """Upload an audio file to the backend"""
+    """Upload an audio file to the backend.
+
+    Der Upload läuft über /api/v1/audio/upload (Feld 'file', optional
+    'category' und 'bpm' als Form-Felder).
+    """
     try:
         backend_url = get_backend_url()
-        files = {'file': (filename, file_data)}
-        data = {'metadata': json.dumps(metadata or {})}
-        
-        response = requests.post(f"{backend_url}/api/v1/stems/upload/", files=files, data=data)
-        if response.status_code == 200:
+        files = {'file': (filename, file_data, 'audio/wav')}
+        data: Dict[str, Any] = {}
+        meta = metadata or {}
+        if meta.get('category'):
+            data['category'] = meta['category']
+        if meta.get('bpm'):
+            data['bpm'] = int(meta['bpm'])
+
+        response = requests.post(f"{backend_url}/api/v1/audio/upload", files=files, data=data)
+        if response.status_code in (200, 201):
             return response.json()
         else:
             return {'error': f'HTTP {response.status_code}: {response.text}'}
@@ -115,7 +137,7 @@ def get_categories() -> List[str]:
     """Get all available categories"""
     try:
         backend_url = get_backend_url()
-        response = requests.get(f"{backend_url}/api/v1/stems/categories/")
+        response = requests.get(f"{backend_url}/api/v1/search/categories")
         if response.status_code == 200:
             return response.json()
         else:
@@ -127,7 +149,7 @@ def get_backend_stats() -> Dict[str, Any]:
     """Get backend statistics"""
     try:
         backend_url = get_backend_url()
-        response = requests.get(f"{backend_url}/api/v1/stats/")
+        response = requests.get(f"{backend_url}/api/v1/search/stats")
         if response.status_code == 200:
             return response.json()
         else:
