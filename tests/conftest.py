@@ -114,6 +114,46 @@ def test_client(test_settings: Settings, db_session: AsyncSession) -> Generator[
 
 
 @pytest.fixture(scope="function")
+def db_manager(test_settings: Settings):
+    """DatabaseManager für Tests, mit einer temporären SQLite-Datei."""
+    import tempfile
+    from database.database import DatabaseManager
+
+    tmpdir = tempfile.mkdtemp(prefix="nt-test-db-")
+    db_path = Path(tmpdir) / "test.db"
+    settings = Settings(
+        DATABASE_URL=f"sqlite:///{db_path}",
+        LOG_LEVEL="DEBUG",
+    )
+    manager = DatabaseManager(settings)
+    yield manager
+
+
+@pytest.fixture(scope="function")
+def sample_audio_file(tmp_path: Path) -> Path:
+    """Pfad zu einer gültigen Test-WAV-Datei."""
+    import wave
+    import numpy as np
+
+    sample_rate = 22050
+    duration = 1.0
+    frequency = 440
+
+    t = np.linspace(0, duration, int(sample_rate * duration))
+    mono = np.sin(2 * np.pi * frequency * t)
+    audio_int16 = (mono * 32767).astype(np.int16)
+
+    file_path = tmp_path / "sample_audio.wav"
+    with wave.open(str(file_path), "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(sample_rate)
+        wav_file.writeframes(audio_int16.tobytes())
+
+    return file_path
+
+
+@pytest.fixture(scope="function")
 def mock_neuro_analyzer() -> MagicMock:
     """Mock für NeuroAnalyzer"""
     mock = MagicMock(spec=NeuroAnalyzer)
