@@ -1,3 +1,10 @@
+"""⚠️ NICHT GEMOUNTET — dieses Modul ist toter Code.
+
+Der ``api_router`` hier wird von keinem Entrypoint eingebunden.
+Der aktive Search-Router wird direkt in ``src/main.py`` unter
+``/api/v1/search/*`` gemountet und kommt aus ``src/search/router.py``.
+"""
+
 from fastapi import APIRouter
 from audio.router import router as audio_router
 from search.router import router as search_router

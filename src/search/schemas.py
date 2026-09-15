@@ -28,7 +28,7 @@ class SearchResult(BaseModel):
     """Schema for individual search result"""
     id: str
     filename: str
-    similarity_score: float = Field(..., ge=0.0, le=1.0)
+    similarity_score: float = Field(..., ge=-1.0, le=1.0)
     category: Optional[str]
     bpm: Optional[int]
     duration: Optional[float]

@@ -24,8 +24,6 @@ async def check_database_paths():
         return
     
     try:
-    
-    try:
         # Alle Pfade anzeigen
         print("1. ALLE PFADE IN DER DATENBANK:")
         all_stems = await db_service.get_all_stems(limit=20, order_by="created_at", order_desc=True)

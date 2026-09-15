@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse
 
 from .service import SearchService
 from .dependencies import get_search_service
-from schemas import (
+from .schemas import (
     SearchRequest,
     SearchResponse,
     SimilarityRequest,
@@ -115,7 +115,7 @@ async def get_categories(
 ):
     """Get list of all available categories"""
     try:
-        categories = await service.db_service.get_categories()
+        categories = await service.db_service.get_stem_categories()
         return categories
     except Exception as e:
         raise HTTPException(

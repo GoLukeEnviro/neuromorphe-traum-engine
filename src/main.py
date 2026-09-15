@@ -17,6 +17,7 @@ from audio.router import router as audio_router
 from api.endpoints.health import router as health_router
 from api.endpoints.stems import router as stems_router
 from api.endpoints.neuromorphic import router as neuromorphic_router
+from search.router import router as search_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -47,6 +48,7 @@ app.include_router(audio_router, prefix="/api/v1/audio", tags=["audio"])
 app.include_router(health_router, prefix="/system", tags=["system"])
 app.include_router(stems_router, prefix="/api/v1/stems", tags=["stems"])
 app.include_router(neuromorphic_router, prefix="/api/v1/neuromorphic", tags=["neuromorphic"])
+app.include_router(search_router, prefix="/api/v1", tags=["search"])
 
 @app.get("/")
 def read_root() -> Dict[str, str]:
@@ -55,12 +57,15 @@ def read_root() -> Dict[str, str]:
 
 @app.get("/debug/routes")
 async def debug_routes():
-    """Zeige alle registrierten Routen für Debugging"""
+    """Zeige alle registrierten Routen für Debugging."""
     routes = []
     for route in app.routes:
+        path = getattr(route, "path", None)
+        if path is None:
+            continue  # Sub-Router-Container ohne eigenen Pfad überspringen
         routes.append({
-            "path": route.path,
-            "name": route.name,
-            "methods": list(route.methods) if hasattr(route, 'methods') else []
+            "path": path,
+            "name": getattr(route, "name", None),
+            "methods": sorted(route.methods) if hasattr(route, "methods") else []
         })
     return {"routes": routes}

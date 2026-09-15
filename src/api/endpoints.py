@@ -1,6 +1,20 @@
 """API-Endpunkte für die Neuromorphe Traum-Engine v2.0
 
-Diese Datei definiert alle FastAPI-Endpunkte für das Backend.
+⚠️ NICHT GEMOUNTET — dieses Modul ist derzeit toter Code.
+
+Der hier definierte ``api_router`` wird von keinem Entrypoint eingebunden.
+Die aktiven Router sind:
+  - ``src/main.py``                          (App + /, /debug/routes)
+  - ``src/api/endpoints/health.py``          → /system/*
+  - ``src/api/endpoints/stems.py``           → /api/v1/stems/*
+  - ``src/api/endpoints/neuromorphic.py``    → /api/v1/neuromorphic/*
+  - ``src/audio/router.py``                  → /api/v1/audio/*
+  - ``src/search/router.py``                 → /api/v1/search/*
+
+Vor einer Reaktivierung prüfen, ob die hier enthaltenen Endpunkte
+(``/preprocess``, ``/play-track`` sowie die Stems/Tracks/Jobs/System-Router)
+nicht bereits durch die oben genannten Router abgedeckt sind — sonst
+entstehen doppelte Routen.
 """
 
 import os

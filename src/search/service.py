@@ -40,11 +40,16 @@ class SearchService:
         return self._clap_model
     
     def _load_clap_model(self) -> Any:
-        """Load CLAP model in thread pool"""
+        """Load CLAP model in thread pool.
+
+        ``load_ckpt()`` ohne Argument lädt das Standard-Checkpoint aus dem
+        Cache bzw. lädt es beim ersten Aufruf herunter. Ein Versionsname wie
+        "630k-audioset-best" würde sonst als Dateipfad interpretiert.
+        """
         from laion_clap import CLAP_Module
 
         model = CLAP_Module(enable_fusion=False)
-        model.load_ckpt(self.model_version)
+        model.load_ckpt()
         return model
     
     async def search_by_text(self, request: SearchRequest) -> SearchResponse:
@@ -80,14 +85,18 @@ class SearchService:
             # Create search results
             results = []
             for file_info, similarity in similarities:
+                stem_id = str(file_info['id'])
+                filename = file_info['filename'] or ''
+                suffix = filename.split('.')[-1] if '.' in filename else 'wav'
+                raw_bpm = file_info.get('bpm')
                 result = SearchResult(
-                    id=file_info['id'],
-                    filename=file_info['filename'],
+                    id=stem_id,
+                    filename=filename,
                     similarity_score=float(similarity),
                     category=file_info.get('category'),
-                    bpm=file_info.get('bpm'),
+                    bpm=int(round(raw_bpm)) if raw_bpm else None,
                     duration=file_info.get('duration'),
-                    file_path=f"/audio_files/{file_info['id']}.{file_info['filename'].split('.')[-1]}"
+                    file_path=f"/audio_files/{stem_id}.{suffix}"
                 )
                 results.append(result)
             
@@ -124,17 +133,16 @@ class SearchService:
         similarities = []
         
         for file_info in audio_files:
-            # Load audio embedding
-            embedding_path = self.embedding_dir / f"{file_info['id']}.npy"
-            if not embedding_path.exists():
+            # Embedding kommt aus der Datenbank (Spalte audio_embedding).
+            raw_embedding = file_info.get('embedding')
+            if not raw_embedding:
                 continue
             
             try:
-                loop = asyncio.get_event_loop()
-                audio_embedding = await loop.run_in_executor(
-                    self._executor,
-                    lambda: np.load(str(embedding_path))
-                )
+                if isinstance(raw_embedding, np.ndarray):
+                    audio_embedding = raw_embedding
+                else:
+                    audio_embedding = np.asarray(raw_embedding, dtype=np.float32)
                 
                 # Calculate cosine similarity
                 similarity = cosine_similarity(
@@ -157,16 +165,16 @@ class SearchService:
         start_time = time.time()
         
         try:
-            # Load source embedding
-            source_embedding_path = self.embedding_dir / f"{request.source_file_id}.npy"
-            if not source_embedding_path.exists():
+            # Quell-Embedding aus der Datenbank laden (Spalte audio_embedding).
+            source_file = await self.db_service.get_stem_by_id(request.source_file_id)
+            if source_file is None or not source_file.audio_embedding:
                 raise Exception(f"Source embedding not found for {request.source_file_id}")
-            
-            loop = asyncio.get_event_loop()
-            source_embedding = await loop.run_in_executor(
-                self._executor,
-                lambda: np.load(str(source_embedding_path))
-            )
+
+            raw_source = source_file.audio_embedding
+            if isinstance(raw_source, np.ndarray):
+                source_embedding = raw_source
+            else:
+                source_embedding = np.asarray(raw_source, dtype=np.float32)
             
             # Get target files
             if request.target_file_ids:
@@ -188,14 +196,18 @@ class SearchService:
             # Create search results
             results = []
             for file_info, similarity in similarities:
+                stem_id = str(file_info['id'])
+                filename = file_info['filename'] or ''
+                suffix = filename.split('.')[-1] if '.' in filename else 'wav'
+                raw_bpm = file_info.get('bpm')
                 result = SearchResult(
-                    id=file_info['id'],
-                    filename=file_info['filename'],
+                    id=stem_id,
+                    filename=filename,
                     similarity_score=float(similarity),
                     category=file_info.get('category'),
-                    bpm=file_info.get('bpm'),
+                    bpm=int(round(raw_bpm)) if raw_bpm else None,
                     duration=file_info.get('duration'),
-                    file_path=f"/audio_files/{file_info['id']}.{file_info['filename'].split('.')[-1]}"
+                    file_path=f"/audio_files/{stem_id}.{suffix}"
                 )
                 results.append(result)
             

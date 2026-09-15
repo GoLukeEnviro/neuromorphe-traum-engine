@@ -131,7 +131,7 @@ async def setup_database(force: bool = False):
         
         # Basis-Konfiguration einfügen
         from database.crud import ConfigurationCRUD
-from schemas.schemas import ConfigurationSettingCreate
+        from schemas.schemas import ConfigurationSettingCreate
         
         async with db_manager.get_async_session() as session:
             
