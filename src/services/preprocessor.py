@@ -31,7 +31,6 @@ from typing import Dict, List, Optional, Any, Callable, Union
 from pathlib import Path
 import json
 import hashlib
-import tempfile
 import wave
 from datetime import datetime
 
@@ -57,21 +56,6 @@ from database.service import DatabaseService
 from database.models import Stem
 
 logger = logging.getLogger(__name__)
-
-
-# --------------------------------------------------------------------------------------
-# Essentia ist optional - die Namen existieren aber immer im Modul, damit sie sich
-# (z. B. in Tests) patchen lassen.
-# --------------------------------------------------------------------------------------
-try:  # pragma: no cover - optionale Abhängigkeit
-    import essentia  # type: ignore
-except Exception:  # pragma: no cover - essentia ist nicht installiert
-    essentia = None  # type: ignore
-
-try:  # pragma: no cover - optionale Abhängigkeit
-    import essentia.standard as es  # type: ignore
-except Exception:  # pragma: no cover
-    es = None  # type: ignore
 
 
 # --------------------------------------------------------------------------------------
@@ -567,7 +551,33 @@ class PreprocessorService:
         config: Optionales Settings-Objekt (Default: globale ``settings``).
         neuro_analyzer: Optionale NeuroAnalyzer-Instanz (z. B. für Tests).
     """
-    
+
+    #: Idempotenz-Cache über Instanzen/Prozessläufe hinweg: Byte-Hashes der
+    #: Quelldateien, die in diesem Prozess bereits in die Stem-Bibliothek
+    #: übernommen wurden. Ein Verzeichnislauf überspringt solche Dateien,
+    #: statt sie erneut zu analysieren (Pendant zur ``file_hash``-Prüfung
+    #: in der Datenbank).
+    _imported_source_hashes: set = set()
+
+    #: Obergrenze für :attr:`_imported_source_hashes` (älteste zuerst).
+    _IMPORTED_HASH_LIMIT = 10000
+
+    def _remember_imported_source(self, file_path: Union[str, Path]) -> None:
+        """Merkt eine erfolgreich übernommene Quelldatei (Idempotenz)."""
+        source_hash = self._hash_source_file(file_path)
+        if not source_hash:
+            return
+        registry = type(self)._imported_source_hashes
+        registry.add(source_hash)
+        # Begrenzen, damit der Prozess-Cache nicht unbegrenzt wächst.
+        if len(registry) > self._IMPORTED_HASH_LIMIT:
+            registry.pop()
+
+    @classmethod
+    def reset_import_registry(cls) -> None:
+        """Leert den Idempotenz-Cache (z. B. zwischen Test-Sessions)."""
+        cls._imported_source_hashes.clear()
+
     def __init__(self, config: Optional[Any] = None, neuro_analyzer: Optional[Any] = None):
         self.settings = config if config is not None else settings
         self.config = self.settings
@@ -864,6 +874,9 @@ class PreprocessorService:
             if not duration:
                 duration = metadata['duration']
 
+            # Erfolgreich importiert -> Quelle als "bereits übernommen" merken.
+            self._remember_imported_source(file_path)
+
             logger.info(f"Stem erfolgreich verarbeitet: {path.name} (ID: {stem_id})")
 
             result = {
@@ -1157,8 +1170,25 @@ class PreprocessorService:
     # Stapelverarbeitung
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _hash_source_file(file_path: Union[str, Path]) -> str:
+        """MD5-Hash über die Rohbytes einer Quelldatei (Duplikatserkennung)."""
+        digest = hashlib.md5()
+        try:
+            with open(file_path, 'rb') as raw_file:
+                for chunk in iter(lambda: raw_file.read(1024 * 1024), b''):
+                    digest.update(chunk)
+        except OSError:
+            return ""
+        return digest.hexdigest()
+
     def _find_audio_files(self, directory_path: str, recursive: bool = True) -> List[Path]:
-        """Findet alle Audio-Dateien in einem Verzeichnis."""
+        """Findet alle Audio-Dateien in einem Verzeichnis.
+
+        Verzeichnisse können Fremd-Dateien oder bereits importierte Quellen
+        enthalten. Kandidaten werden deshalb vorab geprüft (lesbarer Header)
+        und bereits übernommene Dateien übersprungen.
+        """
         directory = Path(directory_path)
         if not directory.exists():
             raise ValueError(f"Verzeichnis nicht gefunden: {directory_path}")
@@ -1168,11 +1198,48 @@ class PreprocessorService:
         else:
             candidates = directory.glob('*')
 
-        files = [
-            path for path in candidates
-            if path.suffix.lower() in self.supported_formats and path.is_file()
-        ]
+        files: List[Path] = []
+        for path in candidates:
+            if path.suffix.lower() not in self.supported_formats or not path.is_file():
+                continue
+            if not self._is_readable_audio(path):
+                continue
+
+            # Bereits importierte Quellen nicht erneut aufnehmen.
+            source_hash = self._hash_source_file(path)
+            if source_hash and source_hash in self._imported_source_hashes:
+                logger.debug(f"Überspringe bereits importierte Datei: {path.name}")
+                continue
+
+            files.append(path)
+
         return sorted(files)
+
+    @staticmethod
+    def _is_readable_audio(path: Path) -> bool:
+        """Prüft, ob eine Datei ein lesbares Audio-Format hat (Header-Check)."""
+        try:
+            if path.stat().st_size <= 0:
+                return False
+        except OSError:
+            return False
+
+        if path.suffix.lower() == '.wav':
+            try:
+                with wave.open(str(path), 'rb') as wav_file:
+                    return (
+                        wav_file.getnframes() > 0
+                        and wav_file.getframerate() > 0
+                    )
+            except Exception:
+                return False
+
+        try:
+            with open(path, 'rb') as raw_file:
+                header = raw_file.read(4)
+            return len(header) >= 4
+        except OSError:
+            return False
 
     async def process_directory(
         self,

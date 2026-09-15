@@ -9,7 +9,8 @@ from database.database import get_async_db_session
 
 from database.models import (
     Stem, GeneratedTrack, ProcessingJob, 
-    RenderStatus, RenderFormat
+    RenderStatus, RenderFormat,
+    StemType, RenderJob,
 )
 
 

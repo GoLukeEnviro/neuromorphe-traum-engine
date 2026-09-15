@@ -4,9 +4,7 @@ Diese Datei verwaltet die Datenbankverbindungen und -operationen.
 """
 
 import asyncio
-import hashlib
 import math
-import shutil
 import sqlite3
 from datetime import datetime
 from enum import Enum
@@ -15,7 +13,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from uuid import uuid4
 
-from sqlalchemy import create_engine, event, pool, text, select, func, or_
+from sqlalchemy import create_engine, event, pool, text, select, func, or_, String
 from sqlalchemy.ext.asyncio import (
     create_async_engine, 
     AsyncSession, 
@@ -73,6 +71,18 @@ TRACK_FIELD_ALIASES: Dict[str, str] = {
     "metadata": "track_metadata",
     "genre": "target_genre",
     "status": "generation_status",
+}
+
+#: Umkehrung: reale Spalte -> historischer Alias-Name.
+LEGACY_COLUMN_ALIASES: Dict[str, str] = {
+    "filename": "name",
+    "original_path": "file_path",
+    "category": "type",
+    "bpm": "tempo",
+    "musical_key": "key",
+    "manual_tags": "tags",
+    "neural_features": "features",
+    "audio_embedding": "embeddings",
 }
 
 
@@ -404,7 +414,7 @@ class DatabaseManager:
         try:
             async with self.get_async_session() as session:
                 result = await session.execute("SELECT 1")
-                await result.fetchone()
+                result.fetchone()
                 self.logger.info("Database connection test successful")
                 return True
         except Exception as e:
@@ -507,7 +517,7 @@ class DatabaseManager:
                 async with self.get_async_session() as session:
                     for table in Base.metadata.tables.keys():
                         result = await session.execute(f"SELECT COUNT(*) FROM {table}")
-                        count = (await result.fetchone())[0]
+                        count = (result.fetchone())[0]
                         table_sizes[table] = count
             else:
                 # PostgreSQL-spezifische Abfrage
@@ -671,6 +681,10 @@ class DatabaseManager:
         data.pop("created_at", None)
         data.pop("updated_at", None)
         data.pop("processed_at", None)
+        # ``create_stem`` liefert die ID als String; die Dict-API bleibt dazu
+        # konsistent, damit Hin- und Rückgabe denselben Typ haben.
+        if data.get("id") is not None:
+            data["id"] = str(data["id"])
         return data
     
     def _track_to_dict(self, track: GeneratedTrack) -> Dict[str, Any]:
@@ -689,10 +703,32 @@ class DatabaseManager:
         data["options"] = job.options or {}
         return data
     
+    @staticmethod
+    def _coerce_identifier(value: Any) -> Any:
+        """ID für Datenbank-Lookups aufbereiten.
+
+        SQLite speichert ``INTEGER PRIMARY KEY`` als Integer, aber ein Lookup
+        mit dem String ``"1"`` trifft dank Spalten-Affinität denselben Datensatz
+        (verifiziert). Legacy-Tabellen (z. B. aus einem Backup) können dagegen
+        echte Text-IDs enthalten. Deshalb wird der Wert hier NICHT konvertiert:
+        die Affinität der Spalte erledigt das Matching in beide Richtungen.
+        """
+        return value
+    
     async def _get_stem_by_id(self, stem_id: Any) -> Optional[Stem]:
         """Stem per Primärschlüssel laden (innerhalb einer eigenen Session)."""
+        stem_id = self._coerce_identifier(stem_id)
         async with self.get_async_session() as session:
-            return await session.get(Stem, stem_id)
+            stem = await session.get(Stem, stem_id)
+            if stem is not None:
+                return stem
+            
+            # Legacy-Tabellen (z. B. restored backups) können Nicht-Integer-
+            # IDs enthalten; dann greift der ORM-PK-Lookup nicht.
+            result = await session.execute(
+                select(Stem).where(func.cast(Stem.id, String) == str(stem_id))
+            )
+            return result.scalars().first()
     
     # --- Stems ---------------------------------------------------------
     
@@ -700,7 +736,8 @@ class DatabaseManager:
         """Stem erstellen und seine ID zurückgeben.
         
         Akzeptiert die historischen Feldnamen (name/file_path/type/tempo/…)
-        und übersetzt sie auf die Spalten des echten Schemas.
+        und übersetzt sie auf die Spalten des echten Schemas. Die ID wird als
+        String zurückgegeben (historischer Vertrag der Aufrufer).
         """
         data = self._normalize_stem_fields(stem_data)
         data.pop("id", None)
@@ -718,17 +755,69 @@ class DatabaseManager:
             stem = Stem(**data)
             session.add(stem)
             await session.flush()
-            stem_id = stem.id
+            stem_id = str(stem.id)
         
         self.logger.info(f"Stem created: {stem_id}")
         return stem_id
     
     async def get_stem(self, stem_id: Any) -> Optional[Dict[str, Any]]:
-        """Stem als Dict abrufen (``None``, wenn nicht vorhanden)."""
-        stem = await self._get_stem_by_id(stem_id)
-        if stem is None:
+        """Stem als Dict abrufen (``None``, wenn nicht vorhanden).
+        
+        Fällt auf eine rohe SQL-Abfrage zurück, wenn die Tabelle nicht dem
+        aktuellen ORM-Schema entspricht (z. B. nach dem Einspielen eines
+        Legacy-Backups, dessen ``stems``-Tabelle andere Spalten hat).
+        """
+        try:
+            stem = await self._get_stem_by_id(stem_id)
+            if stem is not None:
+                return self._stem_to_dict(stem)
+        except SQLAlchemyError as e:
+            self.logger.debug(f"ORM stem lookup failed, using raw fallback: {e}")
+        
+        raw = await self._fetch_row_raw("stems", stem_id)
+        if raw is None:
             return None
-        return self._stem_to_dict(stem)
+        return self._legacy_row_to_dict(raw)
+    
+    async def _fetch_row_raw(self, table: str, row_id: Any) -> Optional[Dict[str, Any]]:
+        """Datensatz per ID ohne ORM-Mapping lesen (schema-unabhängig)."""
+        try:
+            async with self.get_async_session() as session:
+                result = await session.execute(
+                    text(f'SELECT * FROM "{table}" WHERE "id" = :row_id'),
+                    {"row_id": row_id if not isinstance(row_id, int) else str(row_id)},
+                )
+                row = result.mappings().first()
+                return dict(row) if row is not None else None
+        except SQLAlchemyError as e:
+            self.logger.debug(f"Raw fetch on {table} failed: {e}")
+            return None
+    
+    @staticmethod
+    def _legacy_row_to_dict(row: Dict[str, Any]) -> Dict[str, Any]:
+        """Rohen Legacy-Datensatz auf die Dict-Konvention abbilden."""
+        data: Dict[str, Any] = {}
+        for key, value in row.items():
+            data[key] = value
+            alias = LEGACY_COLUMN_ALIASES.get(key)
+            if alias is not None:
+                data[alias] = value
+        # Nur vorhandene Spalten zusätzlich unter den Alias-Namen anbieten.
+        for canonical, alias in (
+            ("filename", "name"),
+            ("original_path", "file_path"),
+            ("category", "type"),
+            ("bpm", "tempo"),
+            ("musical_key", "key"),
+            ("manual_tags", "tags"),
+            ("neural_features", "features"),
+            ("audio_embedding", "embeddings"),
+        ):
+            if canonical in data and alias not in data:
+                data[alias] = data[canonical]
+        if "id" in data and data["id"] is not None:
+            data["id"] = str(data["id"])
+        return data
     
     async def update_stem(self, stem_id: Any, update_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Stem aktualisieren und das aktualisierte Dict zurückgeben."""
@@ -848,7 +937,7 @@ class DatabaseManager:
             track.stems = list(stems) if stems else []
             session.add(track)
             await session.flush()
-            track_id = track.id
+            track_id = str(track.id)
         
         self.logger.info(f"GeneratedTrack created: {track_id}")
         return track_id
