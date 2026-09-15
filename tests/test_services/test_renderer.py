@@ -19,6 +19,19 @@ class TestRendererService:
         """RendererService-Instanz für Tests"""
         return RendererService(test_settings)
     
+    @pytest.fixture
+    def sample_audio_data(self) -> np.ndarray:
+        """Stereo-Test-Audio als float32-Array der Form (channels, frames).
+
+        Überschreibt bewusst die conftest-Fixture gleichen Namens: der
+        Renderer arbeitet intern mit (channels, frames)-Arrays, während die
+        globale Fixture WAV-Bytes für HTTP-Uploads liefert.
+        """
+        frames = 22050  # 1 Sekunde bei 22050 Hz
+        rng = np.random.default_rng(42)
+        mono = rng.uniform(-0.5, 0.5, frames).astype(np.float32)
+        return np.stack([mono, mono])  # (2, frames)
+    
     @pytest.mark.unit
     def test_initialization(self, test_settings: Settings):
         """Test: RendererService-Initialisierung"""

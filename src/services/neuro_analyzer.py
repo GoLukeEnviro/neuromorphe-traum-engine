@@ -2,15 +2,23 @@
 
 Diese Klasse implementiert die neuromorphe Analyse-Pipeline der Traum-Engine v2.0.
 Sie nutzt CLAP (Contrastive Language-Audio Pre-training) für semantische Audio-Embeddings.
+
+Öffentliche Analyse-Schnittstellen der :class:`NeuroAnalyzer`-Klasse:
+
+* ``analyze_audio``          - Features + CLAP-Embedding für eine Audiodatei
+* ``analyze_text_prompt``    - Text-Embedding (mit Cache) für Prompts
+* ``extract_audio_features`` - klassische Audio-Features
+* ``calculate_similarity``   - Cosinus-Ähnlichkeit zweier Embeddings
+* ``get_similar_stems``      - ähnliche Stems aus der Datenbank
+* ``batch_analyze_stems``    - Stapelverarbeitung mehrerer Dateien
 """
 
 import os
+import inspect
 import logging
-import asyncio
-from typing import Dict, List, Optional, Any, Tuple
+import tempfile
+from typing import Dict, List, Optional, Any, Callable
 from pathlib import Path
-import json
-import pickle
 from datetime import datetime
 
 import numpy as np
@@ -22,8 +30,97 @@ from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
 
 from core.config import settings
+from database.service import DatabaseService
 
 logger = logging.getLogger(__name__)
+
+#: Sample-Rate, die CLAP erwartet.
+CLAP_SAMPLE_RATE = 48000
+
+#: Sentinel für "kein Rückgabewert injiziert".
+_UNSET = object()
+
+
+async def _maybe_await(value: Any) -> Any:
+    """Gibt ``value`` zurück bzw. awaited es, falls es awaitable ist.
+
+    Erlaubt es, Service-Schritte sowohl synchron als auch asynchron
+    aufzurufen und macht die Services unabhängig davon, ob eine
+    überschriebene Methode (z. B. in Tests) eine Coroutine liefert.
+    """
+    if inspect.isawaitable(value):
+        return await value
+    return value
+
+
+class _DeferredCall:
+    """Aufrufbares Objekt, dessen Rückgabewert austauschbar ist.
+
+    Ermöglicht das Injizieren von Ergebnissen (``return_value``), ohne das
+    teure CLAP-Modell laden zu müssen.
+    """
+
+    def __init__(self, implementation: Callable[..., Any]):
+        self._implementation = implementation
+        self.return_value: Any = _UNSET
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        if self.return_value is not _UNSET:
+            return self.return_value
+        return self._implementation(*args, **kwargs)
+
+    def reset(self) -> None:
+        """Entfernt einen injizierten Rückgabewert."""
+        self.return_value = _UNSET
+
+
+class _CLAPModelFacade:
+    """Fassade um das CLAP-Modell.
+
+    Das eigentliche Modell wird erst beim ersten Aufruf geladen, damit
+    Konstruktion und Tests ohne Modell-Download funktionieren.
+    """
+
+    def __init__(self, embedder_provider: Callable[[], Any]):
+        self._embedder_provider = embedder_provider
+        self.get_audio_embedding_from_data = _DeferredCall(self._audio_embedding)
+        self.get_text_embedding = _DeferredCall(self._text_embedding)
+        self.get_audio_features = _DeferredCall(self._audio_features)
+
+    def _audio_embedding(self, audio: np.ndarray, sample_rate: int = CLAP_SAMPLE_RATE) -> np.ndarray:
+        embedder = self._embedder_provider()
+        return embedder.get_audio_embedding(np.asarray(audio, dtype=np.float32), sample_rate)
+
+    def _text_embedding(self, text: str) -> np.ndarray:
+        embedder = self._embedder_provider()
+        return embedder.get_text_embedding(text)
+
+    def _audio_features(self, audio: np.ndarray, sample_rate: int = CLAP_SAMPLE_RATE) -> np.ndarray:
+        return self.get_audio_embedding_from_data(audio, sample_rate=sample_rate)
+
+
+class _CLAPProcessorFacade:
+    """Fassade um den CLAP-Processor (lazy geladen)."""
+
+    def __init__(self, embedder_provider: Callable[[], Any]):
+        self._embedder_provider = embedder_provider
+        self.return_value: Any = _UNSET
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        if self.return_value is not _UNSET:
+            return self.return_value
+
+        embedder = self._embedder_provider()
+        processor = getattr(embedder, "processor", None)
+        if processor is None:
+            raise RuntimeError(
+                "CLAP-Processor ist nicht geladen - bitte 'load_model()' aufrufen"
+            )
+        return processor(*args, **kwargs)
+
+    def reset(self) -> None:
+        """Entfernt einen injizierten Rückgabewert."""
+        self.return_value = _UNSET
 
 
 class CLAPEmbedder:
@@ -391,45 +488,334 @@ class PatternAnalyzer:
 
 
 class NeuroAnalyzer:
-    """Hauptklasse für neuromorphe Audio-Analyse"""
-    
+    """Hauptklasse für neuromorphe Audio-Analyse.
+
+    Die Klasse kapselt Features, Embeddings und Ähnlichkeitssuche. Das
+    CLAP-Modell wird erst bei Bedarf geladen (``model``/``processor`` sind
+    Fassaden), damit Konstruktion und Tests ohne Modell-Download laufen.
+    """
+
     def __init__(self):
         self.semantic_analyzer = SemanticAnalyzer()
         self.pattern_analyzer = PatternAnalyzer()
-        
+
         # Cache für Analysen
-        self.analysis_cache = {}
-        
+        self.analysis_cache: Dict[str, Any] = {}
+        self._text_embedding_cache: Dict[str, np.ndarray] = {}
+
+        # Fassaden für das (lazy) CLAP-Modell
+        self.model = _CLAPModelFacade(lambda: self.semantic_analyzer.embedder)
+        self.processor = _CLAPProcessorFacade(lambda: self.semantic_analyzer.embedder)
+
+        # Embedder-Referenz (z. B. für Health-Checks)
+        self.clap_embedder = getattr(self.semantic_analyzer, "embedder", None)
+
+        # Datenbankzugriff für die Stem-Ähnlichkeitssuche (lazy)
+        self.db_service: Optional[DatabaseService] = None
+
         logger.info("NeuroAnalyzer initialisiert")
-    
-    async def analyze_audio(self, file_path: str) -> Dict[str, Any]:
-        """Führt vollständige neuromorphe Analyse durch"""
-        logger.info(f"Starte neuromorphe Analyse: {file_path}")
-        
+
+    # ------------------------------------------------------------------
+    # Hilfsfunktionen
+    # ------------------------------------------------------------------
+
+    def _normalize_embedding(self, embedding: Any) -> np.ndarray:
+        """L2-Normalisiert ein Embedding (Norm = 1)."""
+        array = np.asarray(embedding, dtype=np.float64).ravel()
+        norm = float(np.linalg.norm(array))
+        if norm <= 0.0 or not np.isfinite(norm):
+            return array
+        return array / norm
+
+    async def _load_audio(self, audio_input: Any, sample_rate: Optional[int] = None):
+        """Lädt Audio aus Pfad, Bytes oder numpy-Array und liefert (audio, sr)."""
+        if isinstance(audio_input, (bytes, bytearray, memoryview)):
+            tmp_path: Optional[str] = None
+            try:
+                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_file:
+                    tmp_file.write(bytes(audio_input))
+                    tmp_path = tmp_file.name
+                audio, sr = librosa.load(tmp_path, sr=sample_rate, mono=True)
+            finally:
+                if tmp_path and os.path.exists(tmp_path):
+                    try:
+                        os.unlink(tmp_path)
+                    except OSError:  # pragma: no cover - Aufräumen ist best effort
+                        logger.debug(f"Temporäre Datei konnte nicht gelöscht werden: {tmp_path}")
+        elif isinstance(audio_input, np.ndarray):
+            audio = audio_input
+            sr = sample_rate or settings.AUDIO_SAMPLE_RATE
+        else:
+            audio, sr = librosa.load(str(audio_input), sr=sample_rate, mono=True)
+
+        audio = np.asarray(audio, dtype=np.float32)
+        sr = int(sr or sample_rate or settings.AUDIO_SAMPLE_RATE)
+        return audio, sr
+
+    # ------------------------------------------------------------------
+    # Feature-Extraktion
+    # ------------------------------------------------------------------
+
+    async def extract_audio_features(self, audio_data: np.ndarray, sample_rate: int) -> Dict[str, Any]:
+        """Extrahiert klassische Audio-Features (Tempo, Spektrum, Energie)."""
+        audio = np.asarray(audio_data, dtype=np.float32)
+
+        tempo_raw = librosa.beat.tempo(y=audio, sr=sample_rate)
+        tempo = float(np.asarray(tempo_raw).ravel()[0])
+
+        spectral_centroid = float(np.mean(
+            librosa.feature.spectral_centroid(y=audio, sr=sample_rate)
+        ))
+        spectral_bandwidth = float(np.mean(
+            librosa.feature.spectral_bandwidth(y=audio, sr=sample_rate)
+        ))
+
+        mfcc_raw = librosa.feature.mfcc(y=audio, sr=sample_rate, n_mfcc=13)
+        mfcc_mean = [float(value) for value in np.mean(np.atleast_2d(mfcc_raw), axis=1)]
+
+        rms = librosa.feature.rms(y=audio)
+        energy = float(np.mean(rms))
+        zero_crossing_rate = float(np.mean(librosa.feature.zero_crossing_rate(audio)))
+
+        return {
+            "tempo": tempo,
+            "spectral_centroid": spectral_centroid,
+            "spectral_bandwidth": spectral_bandwidth,
+            "mfcc": mfcc_mean,
+            "mfcc_mean": mfcc_mean,
+            "energy": energy,
+            "rms_mean": energy,
+            "zero_crossing_rate": zero_crossing_rate,
+            "duration": float(len(audio) / sample_rate) if sample_rate else 0.0,
+        }
+
+    # ------------------------------------------------------------------
+    # Vollständige Audio-Analyse
+    # ------------------------------------------------------------------
+
+    async def analyze_audio(self, audio_input: Any, sample_rate: Optional[int] = None) -> Dict[str, Any]:
+        """Führt die neuromorphe Analyse für Audio durch.
+
+        ``audio_input`` darf ein Dateipfad, rohe Bytes (z. B. ein WAV-Upload)
+        oder ein numpy-Array sein.
+        """
+        label = audio_input if isinstance(audio_input, (str, Path)) else "<audio-daten>"
+        logger.info(f"Starte neuromorphe Analyse: {label}")
+
+        audio, sr = await self._load_audio(audio_input, sample_rate)
+        if audio.size == 0:
+            raise ValueError("Audio-Daten sind leer")
+
+        # Klassische Features
+        features = await self.extract_audio_features(audio, sr)
+
+        # CLAP-Embedding
+        raw_embedding = self.model.get_audio_embedding_from_data(audio, sample_rate=sr)
+        embedding = self._normalize_embedding(raw_embedding)
+
+        result: Dict[str, Any] = {
+            "file_path": str(label),
+            "analysis_timestamp": datetime.now().isoformat(),
+            "sample_rate": sr,
+            "duration": float(len(audio) / sr) if sr else 0.0,
+            "embeddings": [float(value) for value in embedding],
+            "embedding_dimension": int(len(embedding)),
+            "features": features,
+            "semantic_analysis": {},
+            "pattern_analysis": {},
+            "neural_features": {
+                "feature_count": len(features),
+                "energy": features.get("energy", 0.0),
+                "tempo": features.get("tempo", 0.0),
+            },
+        }
+
+        # Optionale Tiefenanalyse. Die semantische Analyse benötigt das
+        # CLAP-Modell und läuft deshalb nur, wenn es bereits geladen ist -
+        # so löst eine einfache Analyse keinen Modell-Download aus.
+        embedder = getattr(self.semantic_analyzer, "embedder", None)
+        semantic_ready = bool(getattr(embedder, "is_loaded", False))
+        if semantic_ready:
+            try:
+                semantic = self.semantic_analyzer.analyze_semantic_content(audio, sr)
+                if isinstance(semantic, dict):
+                    result["semantic_analysis"] = semantic
+            except Exception as error:  # pragma: no cover - abhängig vom CLAP-Modell
+                logger.warning(f"Semantische Analyse nicht verfügbar: {error}")
+
         try:
-            # Audio laden
-            audio, sample_rate = librosa.load(file_path, sr=None, mono=True)
-            
-            # Verschiedene Analysen durchführen
-            analysis_result = {
-                'file_path': file_path,
-                'analysis_timestamp': datetime.now().isoformat(),
-                'semantic_analysis': self.semantic_analyzer.analyze_semantic_content(audio, sample_rate),
-                'pattern_analysis': self.pattern_analyzer.analyze_patterns(audio, sample_rate),
-                'neural_features': await self._extract_neural_features(audio, sample_rate),
-                'perceptual_mapping': self._create_perceptual_mapping(audio, sample_rate)
-            }
-            
-            # Gesamtbewertung erstellen
-            analysis_result['overall_assessment'] = self._create_overall_assessment(analysis_result)
-            
-            logger.info(f"Neuromorphe Analyse abgeschlossen: {file_path}")
-            return analysis_result
-            
-        except Exception as e:
-            logger.error(f"Fehler bei neuromorpher Analyse von {file_path}: {e}")
-            raise
-    
+            patterns = self.pattern_analyzer.analyze_patterns(audio, sr)
+            if isinstance(patterns, dict):
+                result["pattern_analysis"] = patterns
+        except Exception as error:  # pragma: no cover - abhängig von librosa
+            logger.warning(f"Pattern-Analyse nicht verfügbar: {error}")
+
+        if result["semantic_analysis"] and result["pattern_analysis"]:
+            try:
+                result["overall_assessment"] = self._create_overall_assessment(result)
+            except Exception as error:  # pragma: no cover - defensiv
+                logger.warning(f"Gesamtbewertung nicht verfügbar: {error}")
+
+        return result
+
+    # ------------------------------------------------------------------
+    # Text-Embeddings
+    # ------------------------------------------------------------------
+
+    async def _compute_text_embedding(self, prompt: str) -> np.ndarray:
+        """Berechnet ein Text-Embedding über das CLAP-Modell."""
+        inputs = self.processor(text=[prompt], return_tensors="pt")
+        raw_embedding = self.model.get_text_embedding(**inputs)
+        return self._normalize_embedding(raw_embedding)
+
+    async def analyze_text_prompt(self, prompt: str) -> Dict[str, Any]:
+        """Erstellt ein Text-Embedding für einen Prompt (mit Cache)."""
+        if not prompt or not str(prompt).strip():
+            raise ValueError("Prompt darf nicht leer sein")
+
+        prompt = str(prompt)
+        cache_key = prompt.strip().lower()
+
+        if cache_key not in self._text_embedding_cache:
+            self._text_embedding_cache[cache_key] = await _maybe_await(
+                self._compute_text_embedding(prompt)
+            )
+
+        embedding = self._text_embedding_cache[cache_key]
+        return {
+            "embeddings": [float(value) for value in np.asarray(embedding).ravel()],
+            "prompt": prompt,
+            "embedding_dimension": int(np.asarray(embedding).size),
+        }
+
+    # ------------------------------------------------------------------
+    # Ähnlichkeit
+    # ------------------------------------------------------------------
+
+    async def calculate_similarity(self, embedding1: Any, embedding2: Any) -> float:
+        """Berechnet die Cosinus-Ähnlichkeit zweier Embeddings."""
+        array1 = np.asarray(embedding1, dtype=np.float64).ravel()
+        array2 = np.asarray(embedding2, dtype=np.float64).ravel()
+
+        if array1.size == 0 or array2.size == 0 or array1.size != array2.size:
+            raise ValueError("Embeddings müssen gleich lang und nicht leer sein")
+
+        similarity = cosine_similarity(array1.reshape(1, -1), array2.reshape(1, -1))[0, 0]
+        return float(np.clip(similarity, -1.0, 1.0))
+
+    def _get_db_service(self) -> DatabaseService:
+        """Lazy erzeugter Datenbankzugriff."""
+        if self.db_service is None:
+            self.db_service = DatabaseService()
+        return self.db_service
+
+    async def _query_similar_stems(
+        self,
+        query_embedding: Any,
+        session: Optional[Any] = None,
+        limit: int = 10,
+    ) -> List[Dict[str, Any]]:
+        """Holt Kandidaten-Stems aus der Datenbank und bewertet sie.
+
+        Liefert je Stem ``{"id", "file_path", "category", "similarity"}``.
+        """
+        query = np.asarray(query_embedding, dtype=np.float64).ravel()
+        if query.size == 0:
+            return []
+
+        files = await _maybe_await(
+            self._get_db_service().get_audio_files(limit=max(limit * 10, 50))
+        )
+
+        scored: List[Dict[str, Any]] = []
+        for entry in files or []:
+            embedding = entry.get("embedding")
+            if not embedding:
+                continue
+            candidate = np.asarray(embedding, dtype=np.float64).ravel()
+            if candidate.size != query.size:
+                continue
+            similarity = float(
+                cosine_similarity(query.reshape(1, -1), candidate.reshape(1, -1))[0, 0]
+            )
+            scored.append({
+                "id": entry.get("id"),
+                "file_path": entry.get("filename"),
+                "category": entry.get("category"),
+                "bpm": entry.get("bpm"),
+                "duration": entry.get("duration"),
+                "similarity": similarity,
+            })
+
+        scored.sort(key=lambda item: item["similarity"], reverse=True)
+        return scored[:limit]
+
+    async def get_similar_stems(
+        self,
+        query_embedding: Any,
+        session: Optional[Any] = None,
+        limit: int = 10,
+        threshold: float = 0.0,
+    ) -> List[Dict[str, Any]]:
+        """Findet ähnliche Stems zu einem Query-Embedding.
+
+        Ergebnisse sind nach Ähnlichkeit absteigend sortiert und auf
+        ``limit`` begrenzt; Treffer unterhalb von ``threshold`` werden verworfen.
+        """
+        candidates = await _maybe_await(
+            self._query_similar_stems(query_embedding, session=session, limit=limit)
+        )
+
+        results = [
+            dict(candidate)
+            for candidate in (candidates or [])
+            if float(candidate.get("similarity", 0.0)) >= float(threshold)
+        ]
+        results.sort(key=lambda item: float(item.get("similarity", 0.0)), reverse=True)
+        return results[: int(limit)]
+
+    # ------------------------------------------------------------------
+    # Batch-Verarbeitung
+    # ------------------------------------------------------------------
+
+    async def batch_analyze_stems(
+        self,
+        file_paths: List[str],
+        max_concurrent: int = 4,
+        progress_callback: Optional[Callable[..., Any]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Analysiert mehrere Stem-Dateien parallel."""
+        import asyncio
+
+        paths = [str(path) for path in file_paths]
+        if not paths:
+            return []
+
+        semaphore = asyncio.Semaphore(max(1, int(max_concurrent)))
+        total = len(paths)
+
+        async def _analyze_one(index: int, path: str) -> Dict[str, Any]:
+            async with semaphore:
+                if progress_callback is not None:
+                    try:
+                        await _maybe_await(progress_callback(index, total, f"Analyzing {path}"))
+                    except Exception as error:  # pragma: no cover - Callback-Fehler ignorieren
+                        logger.warning(f"Progress-Callback fehlgeschlagen: {error}")
+
+                result = await _maybe_await(self.analyze_audio(path))
+                if isinstance(result, dict):
+                    result.setdefault("file_path", path)
+                    return result
+                return {"file_path": path, "result": result}
+
+        return list(await asyncio.gather(*[
+            _analyze_one(index, path) for index, path in enumerate(paths, 1)
+        ]))
+
+    # ------------------------------------------------------------------
+    # Tiefenanalyse (legacy)
+    # ------------------------------------------------------------------
+
     async def _extract_neural_features(self, audio: np.ndarray, sample_rate: int) -> Dict[str, Any]:
         """Extrahiert neurale Features"""
         # Simulierte neurale Features (in Produktion würde man echte neurale Netze verwenden)

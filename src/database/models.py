@@ -3,27 +3,58 @@
 Diese Datei definiert alle SQLAlchemy-Modelle für die Datenbank.
 """
 
+import math
 from datetime import datetime
 from typing import Optional, List, Dict, Any
+from uuid import uuid4
 from sqlalchemy import Column, Integer, String, Float, DateTime, Text, Boolean, JSON, ForeignKey, Index
-from sqlalchemy.orm import DeclarativeBase, relationship
+from sqlalchemy.orm import DeclarativeBase, relationship, synonym, validates
 from sqlalchemy.dialects.sqlite import JSON as SQLiteJSON
+from sqlalchemy.ext.hybrid import hybrid_property
 from enum import Enum
 
 class Base(DeclarativeBase):
     pass
+
+#: Erwartete Dimension der CLAP-/Audio-Embeddings (siehe ``Stem.embeddings``).
+EMBEDDING_DIM = 512
+
+#: Schema-Version, die von ``DatabaseManager.get_schema_version`` gemeldet wird.
+SCHEMA_VERSION = "2.0.0"
 
 class RenderStatus(str, Enum):
     PENDING = "pending"
     PROCESSING = "processing"
     COMPLETED = "completed"
     FAILED = "failed"
+    CANCELLED = "cancelled"
 
 class RenderFormat(str, Enum):
     WAV = "wav"
     MP3 = "mp3"
     FLAC = "flac"
     OGG = "ogg"
+
+class StemType(str, Enum):
+    """Kategorien eines Stems.
+
+    Entspricht den Werten der Spalte ``stems.category``. Die Aufzählung wird
+    nicht erzwungen — ``Stem.type`` bleibt ein normaler String —, damit die
+    bestehende Datenbank und die API unverändert weiterlaufen.
+    """
+
+    KICK = "kick"
+    BASS = "bass"
+    HIHAT = "hihat"
+    SNARE = "snare"
+    PERCUSSION = "percussion"
+    SYNTH = "synth"
+    FX = "fx"
+    ATMO = "atmo"
+    LOOP = "loop"
+    VOCAL = "vocal"
+    UNKNOWN = "unknown"
+    OTHER = "other"
 
 
 class Stem(Base):
@@ -90,6 +121,45 @@ class Stem(Base):
     # Beziehungen
     track_stems = relationship("TrackStem", back_populates="stem")
     
+    # ------------------------------------------------------------------
+    # Kompatibilitäts-Aliase (rein additiv)
+    #
+    # Diese Synonyme und Hybrid-Properties mappen die historischen, in Tests
+    # und Services verwendeten Feldnamen auf die realen Spalten des
+    # ausgelieferten Schemas. Es werden KEINE Spalten umbenannt, entfernt
+    # oder hinzugefügt — die API und die bestehende ``processed_database``
+    # bleiben unverändert nutzbar.
+    #   name       -> filename
+    #   file_path  -> original_path
+    #   type       -> category
+    #   tempo      -> bpm
+    #   key        -> musical_key
+    #   tags       -> manual_tags
+    #   features   -> neural_features
+    #   embeddings -> audio_embedding (mit Längen-Validierung)
+    # ------------------------------------------------------------------
+    name = synonym("filename")
+    file_path = synonym("original_path")
+    type = synonym("category")
+    tempo = synonym("bpm")
+    key = synonym("musical_key")
+    tags = synonym("manual_tags")
+    features = synonym("neural_features")
+    
+    @hybrid_property
+    def embeddings(self) -> Optional[List[float]]:
+        """Historischer Name des Audio-/CLAP-Embeddings."""
+        return self.audio_embedding
+    
+    @embeddings.setter
+    def embeddings(self, value: Optional[List[float]]) -> None:
+        if value is not None and len(value) != EMBEDDING_DIM:
+            raise ValueError(
+                f"embeddings must contain exactly {EMBEDDING_DIM} values, "
+                f"got {len(value)}"
+            )
+        self.audio_embedding = value
+    
     # Indizes für bessere Performance
     __table_args__ = (
         Index('idx_stem_search', 'category', 'genre', 'mood', 'energy_level'),
@@ -97,6 +167,128 @@ class Stem(Base):
         Index('idx_stem_quality', 'quality_score', 'complexity_level'),
         Index('idx_stem_processing', 'processing_status', 'created_at'),
     )
+    
+    # ------------------------------------------------------------------
+    # Hilfsmethoden
+    # ------------------------------------------------------------------
+    def to_dict(self) -> Dict[str, Any]:
+        """Stem als Dictionary serialisieren.
+
+        Enthält sowohl die realen Spaltennamen als auch die historischen
+        Alias-Namen (name/type/tempo/...), damit beide Konsumenten-Gruppen
+        weiterarbeiten.
+        """
+        return {
+            "id": self.id,
+            "filename": self.filename,
+            "name": self.filename,
+            "original_path": self.original_path,
+            "file_path": self.original_path,
+            "processed_path": self.processed_path,
+            "file_hash": self.file_hash,
+            "duration": self.duration,
+            "sample_rate": self.sample_rate,
+            "channels": self.channels,
+            "bit_depth": self.bit_depth,
+            "file_size": self.file_size,
+            "musical_key": self.musical_key,
+            "key": self.musical_key,
+            "bpm": self.bpm,
+            "tempo": self.bpm,
+            "time_signature": self.time_signature,
+            "category": self.category,
+            "type": self.category,
+            "genre": self.genre,
+            "mood": self.mood,
+            "energy_level": self.energy_level,
+            "source": self.source,
+            "auto_tags": self.auto_tags,
+            "manual_tags": self.manual_tags,
+            "tags": self.manual_tags,
+            "audio_embedding": self.audio_embedding,
+            "embeddings": self.audio_embedding,
+            "semantic_analysis": self.semantic_analysis,
+            "pattern_analysis": self.pattern_analysis,
+            "neural_features": self.neural_features,
+            "features": self.neural_features,
+            "perceptual_mapping": self.perceptual_mapping,
+            "harmonic_complexity": self.harmonic_complexity,
+            "rhythmic_complexity": self.rhythmic_complexity,
+            "quality_score": self.quality_score,
+            "complexity_level": self.complexity_level,
+            "recommended_usage": self.recommended_usage,
+            "processing_status": self.processing_status,
+            "processing_error": self.processing_error,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+            "processed_at": self.processed_at,
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Stem":
+        """Stem aus einem Dictionary erstellen (akzeptiert Alias-Namen)."""
+        aliases = {
+            "name": "filename",
+            "file_path": "original_path",
+            "type": "category",
+            "tempo": "bpm",
+            "key": "musical_key",
+            "tags": "manual_tags",
+            "features": "neural_features",
+            "embeddings": "audio_embedding",
+        }
+        skip = {"id", "created_at", "updated_at", "processed_at"}
+        kwargs: Dict[str, Any] = {}
+        for key, value in data.items():
+            if key in skip:
+                continue
+            mapped = aliases.get(key, key)
+            if mapped in cls.__table__.columns:
+                kwargs[mapped] = value
+        return cls(**kwargs)
+    
+    def update_metadata(self, update_data: Dict[str, Any]) -> None:
+        """Metadaten aktualisieren (akzeptiert Alias-Namen)."""
+        aliases = {
+            "name": "filename",
+            "file_path": "original_path",
+            "type": "category",
+            "tempo": "bpm",
+            "key": "musical_key",
+            "tags": "manual_tags",
+            "features": "neural_features",
+            "embeddings": "audio_embedding",
+        }
+        for key, value in update_data.items():
+            mapped = aliases.get(key, key)
+            if hasattr(type(self), mapped):
+                setattr(self, mapped, value)
+        self.updated_at = datetime.utcnow()
+    
+    def calculate_similarity(self, other: "Stem") -> float:
+        """Kosinus-Ähnlichkeit zwischen den Embeddings zweier Stems (0.0-1.0).
+
+        Ein fehlendes oder nulllanges Embedding ergibt 0.0.
+        """
+        a = self.audio_embedding
+        b = getattr(other, "audio_embedding", None)
+        if not a or not b:
+            return 0.0
+        
+        dot = 0.0
+        norm_a = 0.0
+        norm_b = 0.0
+        for x, y in zip(a, b):
+            dot += float(x) * float(y)
+            norm_a += float(x) * float(x)
+            norm_b += float(y) * float(y)
+        
+        if norm_a <= 0.0 or norm_b <= 0.0:
+            return 0.0
+        
+        similarity = dot / (math.sqrt(norm_a) * math.sqrt(norm_b))
+        # Numerische Rundungsfehler abfangen
+        return max(0.0, min(1.0, similarity))
     
     def __repr__(self):
         return f"<Stem(id={self.id}, filename='{self.filename}', category='{self.category}')>"
@@ -165,8 +357,319 @@ class GeneratedTrack(Base):
         Index('idx_track_quality', 'quality_rating', 'generated_at'),
     )
     
+    # ------------------------------------------------------------------
+    # Konstruktor/Validierung
+    #
+    # ``stems`` ist bewusst KEINE Spalte: die Track<->Stem-Verknüpfung liegt
+    # im echten Schema in ``track_stems``. Der Konstruktor akzeptiert die
+    # historische Liste trotzdem, damit bestehende Aufrufer weiterlaufen.
+    # ------------------------------------------------------------------
+    def __init__(self, **kwargs: Any) -> None:
+        stems = kwargs.pop("stems", None)
+        super().__init__(**kwargs)
+        self.stems = list(stems) if stems else []
+    
+    @property
+    def stems(self) -> List[Any]:
+        """Historische Liste der Stem-IDs/Objekte (nicht persistiert)."""
+        return self.__dict__.setdefault("_stems", [])
+    
+    @stems.setter
+    def stems(self, value: Any) -> None:
+        self.__dict__["_stems"] = list(value) if value else []
+    
+    @validates("duration")
+    def _validate_duration(self, key: str, value: Any) -> Any:
+        if value is not None and value < 0:
+            raise ValueError("duration must not be negative")
+        return value
+    
+    @validates("original_prompt")
+    def _validate_original_prompt(self, key: str, value: Any) -> Any:
+        if value is None or not str(value).strip():
+            raise ValueError("original_prompt must not be empty")
+        return value
+    
+    # ------------------------------------------------------------------
+    # Hilfsmethoden
+    # ------------------------------------------------------------------
+    def to_dict(self) -> Dict[str, Any]:
+        """Track als Dictionary serialisieren (inkl. historischer Alias-Namen)."""
+        return {
+            "id": self.id,
+            "title": self.title,
+            "description": self.description,
+            "original_prompt": self.original_prompt,
+            "prompt": self.original_prompt,
+            "output_path": self.output_path,
+            "preview_path": self.preview_path,
+            "file_hash": self.file_hash,
+            "duration": self.duration,
+            "sample_rate": self.sample_rate,
+            "channels": self.channels,
+            "file_size": self.file_size,
+            "target_bpm": self.target_bpm,
+            "target_key": self.target_key,
+            "target_genre": self.target_genre,
+            "genre": self.target_genre,
+            "target_mood": self.target_mood,
+            "target_energy": self.target_energy,
+            "arrangement_plan": self.arrangement_plan,
+            "track_structure": self.track_structure,
+            "rendering_settings": self.rendering_settings,
+            "master_effects": self.master_effects,
+            "generation_status": self.generation_status,
+            "status": self.generation_status,
+            "generation_error": self.generation_error,
+            "quality_rating": self.quality_rating,
+            "track_metadata": self.track_metadata,
+            "metadata": self.track_metadata,
+            "tags": self.tags,
+            "stems": list(self.stems),
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+            "generated_at": self.generated_at,
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "GeneratedTrack":
+        """Track aus einem Dictionary erstellen (akzeptiert Alias-Namen)."""
+        aliases = {
+            "prompt": "original_prompt",
+            "genre": "target_genre",
+            "metadata": "track_metadata",
+            "status": "generation_status",
+        }
+        skip = {"id", "created_at", "updated_at", "stems"}
+        kwargs: Dict[str, Any] = {}
+        for key, value in data.items():
+            if key in skip:
+                continue
+            mapped = aliases.get(key, key)
+            if mapped in cls.__table__.columns:
+                kwargs[mapped] = value
+        if "stems" in data:
+            kwargs["stems"] = data["stems"]
+        return cls(**kwargs)
+    
     def __repr__(self):
         return f"<GeneratedTrack(id={self.id}, title='{self.title}', status='{self.generation_status}')>"
+
+
+class Arrangement(Base):
+    """Modell für Arrangements (Prompt + Struktur eines generierten Tracks).
+
+    Eigene Tabelle ``arrangements``. Die Spalten sind kompatibel zum
+    historischen ``Arrangement``-Modell (prompt/duration/genre/…), damit
+    bestehende Aufrufer unverändert weiterarbeiten.
+    """
+    __tablename__ = "arrangements"
+    
+    # Primärschlüssel
+    id = Column(String(36), primary_key=True, index=True)
+    
+    # Inhalt
+    prompt = Column(Text, nullable=False)
+    duration = Column(Float, nullable=True)
+    genre = Column(String(100), nullable=True, index=True)
+    track_structure = Column(SQLiteJSON, nullable=True)
+    stems = Column(SQLiteJSON, nullable=True)
+    arrangement_metadata = Column(SQLiteJSON, nullable=True)
+    
+    # Status
+    status = Column(String(50), nullable=False, default="pending", index=True)
+    error_message = Column(Text, nullable=True)
+    
+    # Zeitstempel
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    
+    def __init__(self, **kwargs: Any) -> None:
+        # Historischer Name ``metadata`` kollidiert mit der Deklarativ-API,
+        # daher auf ``arrangement_metadata`` mappen.
+        if "metadata" in kwargs:
+            kwargs.setdefault("arrangement_metadata", kwargs.pop("metadata"))
+        if "id" not in kwargs or kwargs.get("id") is None:
+            kwargs["id"] = str(uuid4())
+        super().__init__(**kwargs)
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Arrangement als Dictionary serialisieren."""
+        return {
+            "id": self.id,
+            "prompt": self.prompt,
+            "duration": self.duration,
+            "genre": self.genre,
+            "track_structure": self.track_structure,
+            "stems": self.stems,
+            "metadata": self.arrangement_metadata,
+            "arrangement_metadata": self.arrangement_metadata,
+            "status": self.status,
+            "error_message": self.error_message,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Arrangement":
+        """Arrangement aus einem Dictionary erstellen."""
+        aliases = {"metadata": "arrangement_metadata"}
+        skip = {"created_at", "updated_at"}
+        kwargs: Dict[str, Any] = {}
+        for key, value in data.items():
+            if key in skip:
+                continue
+            mapped = aliases.get(key, key)
+            if mapped in cls.__table__.columns:
+                kwargs[mapped] = value
+        return cls(**kwargs)
+    
+    def __repr__(self):
+        return f"<Arrangement(id={self.id}, genre='{self.genre}', status='{self.status}')>"
+
+
+class RenderJob(Base):
+    """Modell für Render-Jobs.
+
+    Eigene Tabelle ``render_jobs``. Die Spalte ``arrangement_id`` referenziert
+    logisch eine ``Arrangement.id``; es wird bewusst KEIN harter Fremdschlüssel
+    gesetzt, damit auch die historischen ``generated_tracks``-IDs (Integer)
+    unverändert übergeben werden können.
+    """
+    __tablename__ = "render_jobs"
+    
+    # Primärschlüssel
+    id = Column(String(36), primary_key=True, index=True)
+    
+    # Zuordnung
+    arrangement_id = Column(String(36), nullable=True, index=True)
+    
+    # Render-Parameter
+    format = Column(String(20), nullable=False, default="wav")
+    quality = Column(String(20), nullable=False, default="high")
+    options = Column(SQLiteJSON, nullable=True)
+    
+    # Status
+    status = Column(String(50), nullable=False, default=RenderStatus.PENDING.value, index=True)
+    progress = Column(Float, nullable=False, default=0.0)
+    error_message = Column(Text, nullable=True)
+    output_path = Column(String(500), nullable=True)
+    retry_count = Column(Integer, nullable=False, default=0)
+    
+    # Zeitstempel
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    
+    def __init__(self, **kwargs: Any) -> None:
+        if "id" not in kwargs or kwargs.get("id") is None:
+            kwargs["id"] = str(uuid4())
+        # Enum-Werte auf reine Strings normalisieren
+        for key in ("format", "status"):
+            if key in kwargs and isinstance(kwargs[key], Enum):
+                kwargs[key] = kwargs[key].value
+        super().__init__(**kwargs)
+    
+    @validates("progress")
+    def _validate_progress(self, key: str, value: Any) -> Any:
+        if value is None:
+            return 0.0
+        value = float(value)
+        if value < 0.0 or value > 1.0:
+            raise ValueError("progress must be between 0.0 and 1.0")
+        return value
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """RenderJob als Dictionary serialisieren."""
+        return {
+            "id": self.id,
+            "arrangement_id": self.arrangement_id,
+            "format": self.format,
+            "quality": self.quality,
+            "options": self.options,
+            "status": self.status,
+            "progress": self.progress,
+            "error_message": self.error_message,
+            "output_path": self.output_path,
+            "retry_count": self.retry_count,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+            "started_at": self.started_at,
+            "completed_at": self.completed_at,
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "RenderJob":
+        """RenderJob aus einem Dictionary erstellen."""
+        skip = {"created_at", "updated_at", "started_at", "completed_at"}
+        kwargs: Dict[str, Any] = {}
+        for key, value in data.items():
+            if key in skip or key not in cls.__table__.columns:
+                continue
+            kwargs[key] = value
+        return cls(**kwargs)
+    
+    def update_status(
+        self,
+        status: Any,
+        progress: Optional[float] = None,
+        output_path: Optional[str] = None,
+        error_message: Optional[str] = None,
+    ) -> None:
+        """Status (und optional Progress/Ausgabe/Fehler) aktualisieren."""
+        if isinstance(status, Enum):
+            status = status.value
+        self.status = status
+        
+        if progress is not None:
+            self.progress = progress
+        
+        if output_path is not None:
+            self.output_path = output_path
+        
+        if error_message is not None:
+            self.error_message = error_message
+        
+        if status == RenderStatus.PROCESSING.value and self.started_at is None:
+            self.started_at = datetime.utcnow()
+        
+        if status in (RenderStatus.COMPLETED.value, RenderStatus.FAILED.value):
+            self.completed_at = datetime.utcnow()
+        
+        self.updated_at = datetime.utcnow()
+    
+    def retry(self) -> None:
+        """Job für einen erneuten Versuch zurücksetzen."""
+        self.status = RenderStatus.PENDING.value
+        self.progress = 0.0
+        self.error_message = None
+        self.output_path = None
+        self.started_at = None
+        self.completed_at = None
+        self.retry_count = (self.retry_count or 0) + 1
+        self.updated_at = datetime.utcnow()
+    
+    def get_render_time(self) -> Optional[float]:
+        """Renderdauer in Sekunden (None, solange nicht gestartet/beendet)."""
+        if self.started_at is None or self.completed_at is None:
+            return None
+        return (self.completed_at - self.started_at).total_seconds()
+    
+    def get_estimated_remaining_time(self) -> Optional[float]:
+        """Geschätzte verbleibende Renderzeit in Sekunden."""
+        if self.started_at is None or not self.progress or self.progress <= 0.0:
+            return None
+        
+        elapsed = (datetime.utcnow() - self.started_at).total_seconds()
+        if elapsed <= 0.0:
+            return None
+        
+        total_estimate = elapsed / self.progress
+        return max(0.0, total_estimate - elapsed)
+    
+    def __repr__(self):
+        return f"<RenderJob(id={self.id}, format='{self.format}', status='{self.status}')>"
 
 
 class TrackStem(Base):
