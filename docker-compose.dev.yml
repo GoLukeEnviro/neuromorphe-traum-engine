@@ -1,0 +1,129 @@
+# Neuromorphe Traum-Engine v2.0 - Development Override
+# Verwende: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+version: '3.8'
+
+services:
+  neuromorphe-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    environment:
+      - ENVIRONMENT=development
+      - LOG_LEVEL=DEBUG
+      - DATABASE_ECHO=true
+      - ENABLE_HOT_RELOAD=true
+      - ENABLE_PERFORMANCE_MONITORING=true
+      - ENABLE_DATABASE_MONITORING=true
+      - CLAP_MODEL_CACHE_ENABLED=true
+    volumes:
+      # Source Code Mounting für Hot Reload
+      - ./src:/app/src
+      - ./run.py:/app/run.py
+      - ./requirements.txt:/app/requirements.txt
+      # Development-spezifische Volumes
+      - ./tests:/app/tests
+      - ./scripts:/app/scripts
+      - ./docs:/app/docs
+    command: [
+      "python", "run.py", 
+      "--mode", "dev", 
+      "--host", "0.0.0.0", 
+      "--port", "8000", 
+      "--log-level", "DEBUG",
+      "--verbose"
+    ]
+    ports:
+      - "8000:8000"
+      - "8001:8001"  # Debug/Profiling Port
+    # Development: Kein Health Check für schnellere Starts
+    healthcheck:
+      disable: true
+
+  # Development: PostgreSQL deaktiviert (SQLite verwenden)
+  postgres:
+    profiles:
+      - disabled
+
+  # Development: Redis optional
+  redis:
+    profiles:
+      - redis
+
+  # Development Tools Container
+  dev-tools:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: neuromorphe-dev-tools
+    volumes:
+      - ./src:/app/src
+      - ./tests:/app/tests
+      - ./scripts:/app/scripts
+      - ./docs:/app/docs
+      - .:/app/workspace
+    working_dir: /app/workspace
+    command: ["sleep", "infinity"]
+    networks:
+      - neuromorphe-network
+    profiles:
+      - dev-tools
+
+  # Jupyter Notebook für Entwicklung
+  jupyter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: neuromorphe-jupyter
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./src:/app/src
+      - ./notebooks:/app/notebooks
+      - ./data:/app/data
+    environment:
+      - JUPYTER_ENABLE_LAB=yes
+      - JUPYTER_TOKEN=neuromorphe
+    command: [
+      "jupyter", "lab", 
+      "--ip=0.0.0.0", 
+      "--port=8888", 
+      "--no-browser", 
+      "--allow-root",
+      "--notebook-dir=/app"
+    ]
+    networks:
+      - neuromorphe-network
+    profiles:
+      - jupyter
+
+  # Test Runner
+  test-runner:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: neuromorphe-tests
+    volumes:
+      - ./src:/app/src
+      - ./tests:/app/tests
+      - ./test-results:/app/test-results
+    environment:
+      - ENVIRONMENT=testing
+      - DATABASE_URL=sqlite:///app/test-results/test.db
+      - LOG_LEVEL=WARNING
+    command: [
+      "pytest", 
+      "/app/tests", 
+      "-v", 
+      "--cov=/app/src", 
+      "--cov-report=html:/app/test-results/coverage",
+      "--junit-xml=/app/test-results/junit.xml"
+    ]
+    networks:
+      - neuromorphe-network
+    profiles:
+      - testing

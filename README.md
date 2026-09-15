@@ -1,236 +1,451 @@
-# Neuromorphe Traum-Engine v2.0
+# 🎵 Neuromorphe Traum-Engine v2.0
 
-## Überblick
+> *Ein KI-gestützter kreativer Partner für die Generierung von neuartigem Raw-Techno*
+>
+> *"Wo das Kollektive Unbewusste auf intelligente Dirigenten trifft"*
 
-Die Neuromorphe Traum-Engine v2.0 ist ein fortschrittliches System für semantische Audio-Suche, das auf CLAP (Contrastive Language-Audio Pre-training) Embeddings basiert. Das System ermöglicht es Benutzern, Audio-Dateien durch natürlichsprachliche Beschreibungen zu finden und zu kategorisieren.
+Die Neuromorphe Traum-Engine ist keine gewöhnliche Audio-Suchmaschine - sie ist ein semantisches KI-System, das die Grenzen zwischen menschlicher Kreativität und maschineller Intuition verwischt. Basierend auf CLAP-Embeddings und modernster Audio-Technologie schafft sie einen luziden Traumzustand für Musikproduzenten.
 
-## Projektstruktur
+## 🌌 Vision & Philosophie
+
+### Das Kollektive Unbewusste
+Unsere Engine greift auf ein semantisches Gedächtnis zu, das durch millionenfache Audio-Text-Korrelationen trainiert wurde. Jede Suche wird zu einer Reise durch das digitale Kollektivbewusstsein der elektronischen Musik.
+
+### Intelligenter Dirigent
+Der KI-Dirigent interpretiert nicht nur Begriffe, sondern versteht emotionale Nuancen, rhythmische Intentionen und klangliche Atmosphären. Er transformiert "energetic drum loop" in eine multidimensionale Suchanfrage, die über reine Metadaten hinausgeht.
+
+### Luzides Träumen
+Produzenten können in Echtzeit durch ihre Audio-Bibliotheken navigieren, als wären sie in einem luziden Traum - jede Suchanfrage wird zu einer explorativen Reise durch unentdeckte Klanglandschaften.
+
+## 🚀 Core Features
+
+### 🔍 Semantische Audio-Suche
+- **Natürlichsprachige Queries**: "dunkler, hypnotischer Techno-Kick mit industrieller Textur"
+- **Multimodale Suche**: Kombination aus Text, Audio-Beispielen und Stimmungsanalyse
+- **Stem-Mutation**: Generative Variationen gefundener Stems in Echtzeit
+
+### 🧠 KI-Engine
+- **CLAP-Embeddings**: State-of-the-art Audio-Text-Understanding via LAION CLAP
+- **Adaptive Retrieval**: Lernende Suchalgorithmen basierend auf Nutzer-Feedback
+- **Generatives Paradox**: KI-generierte Stem-Vorschläge, die die ursprüngliche Suche erweitern
+
+### 🎛️ Produktions-Workflow
+- **Live-Session Integration**: Direkte Einbindung in DAW-Workflows via API
+- **Stem-Kategorisierung**: Intelligente Klassifizierung (Kick, Bass, Hat, Percussion, FX)
+- **Qualitäts-Scoring**: Automatische Bewertung von technischer und kreativer Qualität
+
+### 🏗️ Architektur (Zwei-Framework-Prinzip)
 
 ```
-Neuromorphe Traum-Engine v2.0/
-├── Construction_Plans/          # Projektdirektiven und Architektur
-│   ├── AGENTEN_DIREKTIVE_001.md
-│   ├── AGENTEN_DIREKTIVE_002.md
-│   ├── AGENTEN_DIREKTIVE_003.md
-│   ├── AGENTEN_DIREKTIVE_004.md
-│   ├── AGENTEN_DIREKTIVE_005_(MASTER_MVP_auf_bestehender_Architektur).md
-│   ├── AGENTEN_DIREKTIVE_006.md
-│   ├── AGENTEN_DIREKTIVE_007_(MASTER_MVP).md
-│   └── AGENTEN_DIREKTIVE_008
-├── ai_agents/                   # Hauptkomponenten des Systems
-│   ├── minimal_preprocessor.py  # Einfacher CLAP-Embedding Preprocessor
-│   ├── optimized_preprocessor.py
-│   ├── prepare_dataset_sql.py   # Erweiterte SQL-basierte Verarbeitung
-│   ├── search_engine_cli.py     # Kommandozeilen-Suchinterface
-│   └── test_prepare_dataset.py
-├── raw_construction_kits/       # Input-Verzeichnis für Audio-Dateien
-├── processed_database/          # Output-Verzeichnis für verarbeitete Daten
-├── requirements.txt             # Python-Abhängigkeiten
-└── [verschiedene Test- und Validierungsskripte]
+┌─────────────────────────────────────────────────────────────┐
+│                  INTELLIGENTER DIRIGENT                      │
+│                    (Live-Framework)                        │
+├─────────────────────────────────────────────────────────────┤
+│  Streamlit Frontend    │    FastAPI Backend    │  Echtzeit- │
+│  (Port 8501)          │    (Port 8000)        │  Audio     │
+│                      │                       │  Engine    │
+├─────────────────────────────────────────────────────────────┤
+│                   PRODUKTIONS-FABRIK                        │
+│                  (Trainings-Framework)                      │
+├─────────────────────────────────────────────────────────────┤
+│  CLAP Model Training  │  Embeddings Pipeline  │  Database  │
+│  Stem Preprocessing   │  Semantic Indexing    │  SQLite    │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-## Kernkomponenten
+## 🎯 MVP-Fokus
 
-### 1. Minimal Preprocessor (`ai_agents/minimal_preprocessor.py`)
+Unsere aktuelle Mission ist die Validierung der kreativen Kernhypothese: **"Kann eine KI wirklich verstehen, was ein Produzent meint, wenn er 'einen treibenden Bass mit dunkler Atmosphäre' sucht?"**
 
-**Zweck**: Erstellt CLAP-Embeddings für Audio-Dateien und speichert sie in einer kompakten Binärdatei.
+### Erfolgsmetriken
+- **Relevanz-Score**: >85% zufriedenstellende Ergebnisse bei semantischen Suchanfragen
+- **Discovery-Rate**: >40% der Ergebnisse sind neue, unbekannte Stems
+- **Workflow-Effizienz**: Reduktion der Suchzeit um 70% gegenüber traditionellen Methoden
 
-**Funktionalität**:
-- Lädt das LAION-CLAP-Modell
-- Durchsucht rekursiv alle .wav-Dateien im Input-Verzeichnis
-- Verarbeitet Audio-Dateien in Batches (Standardgröße: 32)
-- Speichert Embeddings als Pickle-Datei (`processed_database/embeddings.pkl`)
+## 🛠️ Technischer Stack
 
-**Verwendung**:
+### Backend Core
+- **FastAPI**: Moderne, asynchrone REST-API mit OpenAPI-Dokumentation
+- **SQLAlchemy**: ORM für SQLite mit migrationsfähiger Architektur
+- **Pydantic**: Type-safe Datenvalidierung und -serialisierung
+
+### KI/ML Pipeline
+- **LAION CLAP**: Contrastive Language-Audio Pre-training
+- **Librosa**: Audio-Analyse und -verarbeitung
+- **Demucs**: Source Separation für Stem-Extraktion
+- **PyTorch**: Deep Learning Framework für Modelle
+
+### Frontend & UX
+- **Streamlit**: Rapid Prototyping für kreative Interfaces
+- **WebSocket**: Echtzeit-Kommunikation für Live-Sessions
+- **Responsive Design**: Mobile-first Ansatz für Studio- und Live-Einsatz
+
+### Deployment & DevOps
+- **Docker**: Containerisierung für beide Frameworks
+- **Docker Compose**: Orchestrierung von Multi-Service-Setup
+- **GitHub Actions**: CI/CD Pipeline mit automatisierten Tests
+
+## 📦 Quick Start
+
+### ⚡ 30-Sekunden Setup (Docker)
 ```bash
-python ai_agents/minimal_preprocessor.py
+git clone https://github.com/your-org/neuromorphe-traum-engine.git
+cd neuromorphe-traum-engine
+docker-compose up --build
 ```
 
-### 2. Search Engine CLI (`ai_agents/search_engine_cli.py`)
+### 🔧 Lokale Entwicklung
 
-**Zweck**: Interaktive Kommandozeilen-Suchmaschine für semantische Audio-Suche.
+#### Voraussetzungen
+- Python 3.12+
+- 8GB+ RAM (für CLAP-Modell)
+- 10GB+ Speicherplatz
 
-**Funktionalität**:
-- Lädt vorverarbeitete CLAP-Embeddings
-- Berechnet Text-Embeddings für Benutzer-Prompts
-- Findet die ähnlichsten Audio-Dateien mittels Kosinus-Ähnlichkeit
-- Gibt Top-5 Ergebnisse mit Ähnlichkeitswerten aus
-
-**Verwendung**:
+#### Schritt-für-Schritt
 ```bash
-python ai_agents/search_engine_cli.py
-```
+# 1. Repository klonen
+git clone <repository-url>
+cd neuromorphe-traum-engine
 
-**Beispiel-Prompts**:
-- "dark industrial kick with heavy bass"
-- "melodic synth pad"
-- "punchy snare with reverb"
+# 2. Virtuelle Umgebung erstellen
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
 
-### 3. SQL-basierter Preprocessor (`ai_agents/prepare_dataset_sql.py`)
-
-**Zweck**: Erweiterte Verarbeitung mit SQLite-Datenbank und zusätzlichen Metadaten.
-
-**Funktionalität**:
-- Erstellt SQLite-Datenbank (`processed_database/stems.db`)
-- Extrahiert umfangreiche Audio-Metadaten (BPM, Tonart, etc.)
-- Speichert CLAP-Embeddings in der Datenbank
-- Implementiert robuste Batch-Verarbeitung mit Resume-Funktionalität
-- Kategorisiert Audio-Dateien automatisch
-
-## Installation und Setup
-
-### Voraussetzungen
-- Python 3.8+
-- CUDA-kompatible GPU (empfohlen für bessere Performance)
-
-### Installation
-
-1. **Repository klonen/herunterladen**
-
-2. **Abhängigkeiten installieren**:
-```bash
+# 3. Abhängigkeiten installieren
 pip install -r requirements.txt
+
+# 4. Umgebungsvariablen konfigurieren
+cp .env.example .env
+# .env anpassen: DATABASE_URL, UPLOAD_DIR, etc.
+
+# 5. Datenbank initialisieren
+python -m src.cli.migrate_database
+
+# 6. Backend starten
+python -m uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
+
+# 7. Frontend starten (neues Terminal)
+python -m streamlit run frontend/app.py --server.port 8501
 ```
 
-3. **Verzeichnisstruktur erstellen**:
+### 🌐 Zugang nach Setup
+- **Frontend**: http://localhost:8501
+- **Backend API**: http://localhost:8000
+- **API-Dokumentation**: http://localhost:8000/docs
+- **Health Check**: http://localhost:8000/system/health
+
+## 🎯 Verwendung
+
+### 🔍 Semantische Suche - Die Magie entdecken
+
+#### Beispiel-Suchanfragen
 ```bash
-mkdir raw_construction_kits
-mkdir processed_database
+# Basis-Suche
+curl "http://localhost:8000/api/v1/stems/search/?prompt=dark%20techno%20kick"
+
+# Komplexe emotionale Suche
+curl "http://localhost:8000/api/v1/stems/search/?prompt=melancholic%20bass%20with%20industrial%20texture"
+
+# Tempo-basierte Suche
+curl "http://localhost:8000/api/v1/stems/search/?prompt=fast%20percussion%20loop%20130bpm"
+
+# Top-K Ergebnisse
+curl "http://localhost:8000/api/v1/stems/search/?prompt=atmospheric%20pad&top_k=10"
 ```
 
-## Verwendung
+#### Python Integration
+```python
+import requests
 
-### Schnellstart (Minimal MVP)
+# Semantische Suche durchführen
+response = requests.get(
+    "http://localhost:8000/api/v1/stems/search/",
+    params={
+        "prompt": "driving techno bass with analog warmth",
+        "category": "bass",
+        "top_k": 5,
+        "min_similarity": 0.7
+    }
+)
 
-1. **Audio-Dateien hinzufügen**:
-   - Legen Sie .wav-Dateien in den Ordner `raw_construction_kits/`
+results = response.json()
+for stem in results:
+    print(f"🎵 {stem['filename']}")
+    print(f"   Kategorie: {stem['category']}")
+    print(f"   Ähnlichkeit: {stem['similarity']:.3f}")
+    print(f"   Pfad: {stem['path']}")
+```
 
-2. **Embeddings erstellen**:
+### 🎛️ Frontend - Der Luzide Navigator
+
+#### Interface-Komponenten
+1. **Search Portal**: Natürlichsprachige Eingabe mit Live-Vorschlägen
+2. **Stem Explorer**: Visuelle Navigation durch Klang-Universen
+3. **Session Recorder**: Live-Aufnahme von Discovery-Sessions
+4. **AI Assistant**: Kontextuelle Empfehlungen basierend auf Suchverhalten
+
+#### Power-User Features
+- **Batch Processing**: Mehrere Stems gleichzeitig analysieren
+- **Custom Embeddings**: Eigene Modelle trainieren für spezifische Genres
+- **Export Pipeline**: Direkte Integration mit DAWs via MIDI-Steuerung
+
+## 🏗️ Projektstruktur - Das neuronale Netzwerk
+
+```
+neuromorphe-traum-engine/
+├── 🧠 src/                          # Backend - Das neuronale Zentrum
+│   ├── api/                         # REST-API Endpunkte
+│   ├── core/                        # Kernkonfiguration & Logging
+│   ├── database/                    # SQLAlchemy Models & CRUD
+│   ├── schemas/                     # Pydantic Type-Definitionen
+│   ├── services/                    # Business Logic & KI-Services
+│   ├── audio/                       # Audio-Verarbeitung Pipeline
+│   └── search/                      # Semantische Such-Engine
+├── 🎛️ frontend/                     # Streamlit Interface
+│   ├── pages/                       # Multi-Page App Struktur
+│   ├── components/                  # Wiederverwendbare UI-Komponenten
+│   └── utils/                       # Frontend-Hilfsfunktionen
+├── 🗄️ processed_database/           # SQLite + Embeddings
+├── 📁 raw_construction_kits/        # Roh-Audio-Dateien
+├── 🎯 models/                       # CLAP & Custom Modelle
+├── 🐳 docker/                       # Container-Konfiguration
+├── 📊 tests/                        # Test-Suite (pytest)
+└── 📝 docs/                         # Technische Dokumentation
+```
+
+## 🔧 Konfiguration & Anpassung
+
+### Umgebungsvariablen (Environment Variables)
+
+| Variable | Beschreibung | Standardwert | Entwicklung |
+|----------|--------------|--------------|-------------|
+| `PROJECT_NAME` | Anwendungsname | "Neuromorphe Traum-Engine v2.0" | Anpassen |
+| `DATABASE_URL` | SQLite Pfad | "sqlite:///processed_database/stems.db" | Anpassen |
+| `UPLOAD_DIR` | Audio-Uploads | "./raw_construction_kits" | Anpassen |
+| `MODEL_CACHE_DIR` | CLAP Cache | "./models" | Anpassen |
+| `API_BASE_URL` | Backend URL | "http://localhost:8000" | Anpassen |
+| `LOG_LEVEL` | Logging Level | "INFO" | DEBUG für Dev |
+| `MAX_FILE_SIZE` | Max Upload Size | "100MB" | Erhöhen |
+
+### Advanced Configuration
+
+#### Custom CLAP Model Training
+```python
+# src/services/training_service.py
+class CustomCLAPTrainer:
+    def __init__(self, dataset_path: str):
+        self.dataset_path = dataset_path
+        self.model_config = {
+            'audio_encoder': 'HTSAT-base',
+            'text_encoder': 'RoBERTa-base',
+            'embed_dim': 512,
+            'temperature': 0.07
+        }
+```
+
+#### Stem-Kategorisierung erweitern
+```python
+# src/core/config.py
+STEM_CATEGORIES = {
+    'kick': ['kick', 'bassdrum', 'bd'],
+    'snare': ['snare', 'clap', 'rimshot'],
+    'hihat': ['hihat', 'hat', 'openhat', 'closedhat'],
+    'bass': ['bass', 'sub', 'lowend'],
+    'percussion': ['perc', 'shaker', 'conga', 'tom'],
+    'fx': ['sweep', 'riser', 'impact', 'texture'],
+    'synth': ['lead', 'pad', 'stab', 'chord'],
+    'vocal': ['vox', 'voice', 'spoken', 'chant']
+}
+```
+
+## 🧪 Testing & Qualitätssicherung
+
+### Test-Suite ausführen
 ```bash
-python ai_agents/minimal_preprocessor.py
+# Alle Tests
+pytest tests/ -v
+
+# Nur API-Tests
+pytest tests/test_api/ -v
+
+# Mit Coverage
+pytest tests/ --cov=src --cov-report=html
+
+# Performance-Tests
+pytest tests/test_performance.py -v
 ```
 
-3. **Suche starten**:
+### Manuelle Tests
 ```bash
-python ai_agents/search_engine_cli.py
+# Health Check
+curl http://localhost:8000/system/health
+
+# API-Dokumentation
+curl http://localhost:8000/docs
+
+# Suche testen
+curl "http://localhost:8000/api/v1/stems/search/?prompt=test"
 ```
 
-### Erweiterte Verwendung (SQL-basiert)
-
-1. **Audio-Dateien verarbeiten**:
+### Test-Daten erstellen
 ```bash
-python ai_agents/prepare_dataset_sql.py
+# Beispiel-Stems generieren
+python -m src.cli.create_test_audio
+
+# Test-Datenbank befüllen
+python -m src.cli.migrate_database --test-data
 ```
 
-2. **Erweiterte Suche** (falls implementiert):
-```bash
-python search_engine_cli.py
-```
+## 📊 Performance & Skalierung
 
-## Abhängigkeiten
+### System-Anforderungen
+| Komponente | Minimum | Empfohlen | Cloud |
+|------------|---------|-----------|-------|
+| **CPU** | 4 Cores | 8 Cores | 16 Cores |
+| **RAM** | 8GB | 16GB | 32GB |
+| **Storage** | 50GB | 100GB SSD | 500GB SSD |
+| **Network** | 10 Mbps | 100 Mbps | 1 Gbps |
 
-### Kern-Bibliotheken
-- **librosa** (≥0.10.0): Audio-Analyse und -Verarbeitung
-- **laion-clap**: CLAP-Modell für Audio-Text-Embeddings
-- **torch** (≥1.9.0): PyTorch für Deep Learning
-- **numpy** (≥1.21.0): Numerische Berechnungen
-- **soundfile** (≥0.12.0): Audio-Dateien lesen/schreiben
-- **scikit-learn** (≥1.0.0): Machine Learning Algorithmen
-- **tqdm**: Fortschrittsanzeige
+### Performance-Metriken
+- **CLAP-Modell Initialisierung**: 30-60 Sekunden
+- **Embedding-Berechnung**: 1-2 Sekunden pro Audio-Datei
+- **Such-Latenz**: 100-500ms (abhängig von Datenbank-Größe)
+- **Memory-Footprint**: 2-4GB für CLAP-Modell
+- **Datenbank-Größe**: ~1MB pro 1000 Stems
 
-### Standard-Python-Bibliotheken
-- sqlite3, os, logging, datetime, shutil, concurrent.futures, typing, hashlib, pathlib, json
+### Skalierungs-Strategien
+1. **Phase 1**: SQLite → PostgreSQL Migration
+2. **Phase 2**: Single Instance → Microservices
+3. **Phase 3**: CPU → GPU-Acceleration
+4. **Phase 4**: On-Premise → Cloud-Native
 
-## Architektur
-
-### CLAP-Embeddings
-Das System basiert auf LAION-CLAP (Contrastive Language-Audio Pre-training), einem multimodalen Modell, das:
-- Audio-Signale in hochdimensionale Vektorräume einbettet
-- Text-Beschreibungen in denselben Vektorraum projiziert
-- Semantische Ähnlichkeit durch Kosinus-Ähnlichkeit berechnet
-
-### Verarbeitungspipeline
-1. **Audio-Eingabe**: .wav-Dateien im `raw_construction_kits/` Verzeichnis
-2. **Preprocessing**: Extraktion von CLAP-Embeddings
-3. **Speicherung**: Pickle-Datei oder SQLite-Datenbank
-4. **Suche**: Text-zu-Audio-Matching via Embedding-Ähnlichkeit
-
-## Konfiguration
-
-### Batch-Verarbeitung
-- **Batch-Größe**: 32 (anpassbar in `minimal_preprocessor.py`)
-- **Retry-Mechanismus**: Automatische Wiederholung bei Fehlern
-- **Checkpoint-System**: Resume-Funktionalität für große Datensätze
-
-### Performance-Optimierung
-- **GPU-Beschleunigung**: Automatische CUDA-Nutzung wenn verfügbar
-- **Parallele Verarbeitung**: Multi-Threading für I/O-Operationen
-- **Speicher-Effizienz**: Batch-weise Verarbeitung großer Datensätze
-
-## Entwicklung und Testing
-
-### Test-Skripte
-- `test_implementation.py`: Allgemeine Implementierungstests
-- `test_mvp_system.py`: MVP-System-Tests
-- `validate_directive_003.py`: Validierung spezifischer Direktiven
-- `validate_directive_004.py`: Weitere Direktiven-Validierung
-
-### Debugging-Tools
-- `check_db.py`: Datenbank-Integritätsprüfung
-- `check_paths.py`: Pfad-Validierung
-- `verify_clap_embeddings.py`: CLAP-Embedding-Verifikation
-
-## Fehlerbehebung
+## 🐛 Troubleshooting & Support
 
 ### Häufige Probleme
 
-1. **CLAP-Modell lädt nicht**:
-   - Überprüfen Sie die Internetverbindung (Modell wird beim ersten Start heruntergeladen)
-   - Stellen Sie sicher, dass genügend Speicherplatz verfügbar ist
+#### 1. CLAP-Modell lädt nicht
+```bash
+# Cache löschen
+rm -rf models/CLAP/
+# Neu herunterladen beim nächsten Start
+```
 
-2. **Keine Audio-Dateien gefunden**:
-   - Überprüfen Sie, dass .wav-Dateien im `raw_construction_kits/` Verzeichnis liegen
-   - Stellen Sie sicher, dass die Dateien gültige Audio-Formate sind
+#### 2. Datenbank-Lock Probleme
+```bash
+# SQLite Lock beheben
+sqlite3 processed_database/stems.db "PRAGMA journal_mode=WAL;"
+```
 
-3. **Speicher-Probleme**:
-   - Reduzieren Sie die Batch-Größe in der Konfiguration
-   - Verwenden Sie die SQL-basierte Verarbeitung für große Datensätze
+#### 3. Audio-Verarbeitung hängt
+```bash
+# Memory-Limit erhöhen
+export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+```
 
-4. **Performance-Probleme**:
-   - Stellen Sie sicher, dass CUDA verfügbar ist für GPU-Beschleunigung
-   - Überprüfen Sie die verfügbaren Systemressourcen
+#### 4. Docker Container starten nicht
+```bash
+# Logs prüfen
+docker-compose logs -f backend
+docker-compose logs -f frontend
 
-### Logs und Debugging
-- Logs werden in der Konsole ausgegeben
-- Detaillierte Fehlerinformationen in `processed_database/checkpoints/failed_files.json`
-- Progress-Tracking in `processed_database/checkpoints/progress.json`
+# Ports freigeben
+sudo lsof -i :8000
+sudo lsof -i :8501
+```
 
-## Roadmap und Erweiterungen
+### Debug-Modus aktivieren
+```bash
+# Backend mit Debug-Logging
+LOG_LEVEL=DEBUG python -m uvicorn src.main:app --reload
 
-### Geplante Features
-- Web-basierte Benutzeroberfläche
-- Erweiterte Audio-Metadaten-Extraktion
-- Batch-Export-Funktionalität
-- Plugin-System für DAWs
-- Cloud-basierte Verarbeitung
+# Frontend mit Debug-Modus
+STREAMLIT_DEBUG=true python -m streamlit run frontend/app.py
+```
 
-### Experimentelle Features
-- Automatische Tag-Generierung
-- Cluster-basierte Kategorisierung
-- Qualitätsbewertung von Audio-Dateien
-- Benutzer-Rating-System
+### Support-Kanäle
+- **GitHub Issues**: Bug-Reports und Feature-Requests
+- **Discord**: Community-Support und Diskussionen
+- **Wiki**: Erweiterte Dokumentation und Tutorials
 
-## Lizenz und Beiträge
+## 🚀 Roadmap & Future Vision
 
-Dieses Projekt ist Teil der Neuromorphe Traum-Engine Initiative. Beiträge sind willkommen - bitte folgen Sie den Coding-Standards und erstellen Sie Tests für neue Features.
+### Phase 1: MVP ✅
+- [x] Semantische Audio-Suche
+- [x] CLAP-Integration
+- [x] Basic Streamlit Frontend
+- [x] Docker-Containerisierung
 
-## Support
+### Phase 2: Enhanced Intelligence 🚧
+- [ ] Real-time Stem-Mutation
+- [ ] Adaptive Learning from User Feedback
+- [ ] Advanced Audio Analysis (BPM, Key, Mood)
+- [ ] Multi-language Support
 
-Für technische Fragen und Support:
-1. Überprüfen Sie die Dokumentation und häufigen Probleme
-2. Schauen Sie in die Construction_Plans für detaillierte Architektur-Informationen
-3. Erstellen Sie ein Issue mit detaillierter Problembeschreibung
+### Phase 3: Creative Ecosystem 🎯
+- [ ] DAW Plugin Integration (VST/AU)
+- [ ] Collaborative Sessions
+- [ ] Cloud-based Model Training
+- [ ] Mobile Companion App
+
+### Phase 4: Neural Synthesis 🚀
+- [ ] Generative Stem Creation
+- [ ] Style Transfer between Tracks
+- [ ] AI-Powered Arrangement Suggestions
+- [ ] Real-time Collaboration
+
+## 🤝 Contributing & Community
+
+### Beitragen
+1. **Fork** das Repository
+2. **Feature Branch** erstellen: `feature/semantic-melody-search`
+3. **Commit** mit Conventional Commits: `feat: add melody search capability`
+4. **Push** zum Feature Branch
+5. **Pull Request** erstellen
+
+### Code-Standards
+- **PEP 8** für Python
+- **Type Hints** für alle Funktionen
+- **Docstrings** für öffentliche APIs
+- **Tests** für neue Features
+- **Performance** über Optimierung
+
+### Community
+- **Discord**: [Join our Server](https://discord.gg/neuromorphic)
+- **Twitter**: [@NeuromorphicAI](https://twitter.com/neuromorphicai)
+- **YouTube**: Tutorials und Live-Coding
+- **Blog**: Deep-Dive Artikel zur KI-Musikproduktion
+
+## 📄 Lizenz & Attribution
+
+### Lizenz
+```
+MIT License - Siehe LICENSE Datei
+```
+
+### Drittanbieter
+- **CLAP Model**: LAION-AI (MIT License)
+- **Demucs**: Facebook Research (MIT License)
+- **Librosa**: librosa.org (ISC License)
+- **Streamlit**: Streamlit Inc (Apache 2.0)
+
+### Zitierung
+```bibtex
+@software{neuromorphic_dream_engine,
+  title={Neuromorphic Dream Engine: Semantic Audio Search for Electronic Music},
+  author={Your Name},
+  year={2024},
+  url={https://github.com/your-org/neuromorphe-traum-engine}
+}
+```
 
 ---
 
-*Neuromorphe Traum-Engine v2.0 - Semantische Audio-Suche der nächsten Generation*
+<div align="center">
+
+**🎵 *"Where neural networks dream in sound"* 🎵**
+
+*Built with ❤️ for the electronic music community*
+
+[Getting Started](#-quick-start) • [Documentation](docs/) • [API Reference](http://localhost:8000/docs) • [Report Bug](../../issues)
+
+</div>

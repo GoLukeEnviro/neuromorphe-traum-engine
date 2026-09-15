@@ -1,10 +1,12 @@
-# Neuromorphe Traum-Engine v2.0 - Git Ignore File
-
-# Python
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 *$py.class
+
+# C extensions
 *.so
+
+# Distribution / packaging
 .Python
 build/
 develop-eggs/
@@ -22,62 +24,221 @@ share/python-wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-PIPFILE.lock
+MANIFEST
 
-# Virtual Environment
-venv/
+# PyInstaller
+#  Usually these files are written by a python script from a template
+#  before PyInstaller builds the exe, so as to inject date/other infos into it.
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+.pybuilder/
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+#   For a library or package, you might want to ignore these files since the code is
+#   intended to run in multiple environments; otherwise, check them in:
+# .python-version
+
+# pipenv
+#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
+#   However, in case of collaboration, if having platform-specific dependencies or dependencies
+#   having no cross-platform support, pipenv may install dependencies that don't work, or not
+#   install all needed dependencies.
+#Pipfile.lock
+
+# poetry
+#   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
+#   This is especially recommended for binary packages to ensure reproducibility, and is more
+#   commonly ignored for libraries.
+#   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
+#poetry.lock
+
+# pdm
+#   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
+#pdm.lock
+#   pdm stores project-wide configurations in .pdm.toml, but it is recommended to not include it
+#   in version control.
+#   https://pdm.fming.dev/#use-with-ide
+.pdm.toml
+
+# PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
 env/
+venv/
 ENV/
 env.bak/
 venv.bak/
-.venv/
 
-# IDE
-.vscode/
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# PyCharm
+#  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
+#  be added to the global gitignore or merged into this project gitignore.  For a PyCharm
+#  project, it is recommended to exclude the entire .idea directory.
 .idea/
-*.swp
-*.swo
-*~
 
-# Audio Files (Raw Construction Kits)
-raw_construction_kits/
-!raw_construction_kits/.gitkeep
+# VS Code
+.vscode/
 
-# Processed Database and Audio
-processed_database/
+# Project-specific ignores
+.claude/plans/
+node_modules/
+processed_database/*
 !processed_database/.gitkeep
-processed_databasequarantine/
-processed_databasestems/
 
-# Database Files
-*.db
-*.sqlite
-*.sqlite3
+# Data directories
+data/
+cache/
+logs/
+temp/
+tmp/
 
-# Audio Files (General)
+# Neuromorphe Traum-Engine v2.0 - DIRECTIVE 014 specific
+# Audio input/output directories
+raw_construction_kits/
+generated_tracks/
+processed_database/stems/
+processed_database/quarantine/
+
+# Audio files (keep some for testing)
 *.wav
 *.mp3
 *.flac
-*.aiff
-*.m4a
 *.ogg
+*.m4a
+*.aac
 *.wma
+# Exception: Allow test audio files
+!test_audio/
+!samples/
 
-# Ableton Live Files
-*.akp
-*.als
-*.alc
-*.adg
-*.adv
-*.asd
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-wal
+*.db-shm
+# Exception: Keep schema/migration files
+!**/schema.sql
+!**/migrations/
 
-# Temporary Files
-*.tmp
-*.temp
-*.log
-*.cache
+# Model files and embeddings
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.bin
+embeddings/
+models/
+checkpoints/
+# CLAP model cache
+.cache/
+huggingface_cache/
+torch_cache/
 
-# OS Generated Files
+# Processing artifacts
+processing_logs/
+failed_files.json
+progress.json
+*.pkl
+*.pickle
+
+# Generated content
+generated_*/
+output_*/
+render_*/
+
+# Audio processing temporary files
+*.tmp.wav
+*.processing
+*.lock
+
+# Streamlit
+.streamlit/secrets.toml
+
+# OS generated files
 .DS_Store
 .DS_Store?
 ._*
@@ -85,69 +246,105 @@ processed_databasestems/
 .Trashes
 ehthumbs.db
 Thumbs.db
-desktop.ini
 
-# Machine Learning Models
-*.pkl
-*.pickle
-*.joblib
-*.h5
-*.hdf5
-*.pt
-*.pth
-*.onnx
+# Backup files
+*.bak
+*.backup
+*.old
+*.orig
+*.save
 
-# Analysis Results
-analysis_results/
-feature_cache/
-model_cache/
+# Temporary files
+*.tmp
+*.temp
+*~
 
-# Test Files (Keep structure but ignore content)
-test_*.wav
-test_*.mp3
-!test_implementation.py
-
-# Configuration Files with Secrets
-.env
-.env.local
-.env.production
-config.ini
-secrets.json
-
-# Jupyter Notebooks Checkpoints
-.ipynb_checkpoints/
-
-# Coverage Reports
-htmlcov/
-.coverage
-.coverage.*
-coverage.xml
-*.cover
-.hypothesis/
-.pytest_cache/
-
-# Documentation Build
-docs/_build/
-
-# Large Data Files
+# Large files
 *.zip
 *.tar.gz
 *.rar
 *.7z
 
-# Backup Files
-*.bak
-*.backup
-*.old
+# Configuration files with sensitive data
+config.json
+secrets.json
+.secrets
 
-# Node.js (if any frontend components)
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+# Performance profiling
+*.prof
+*.profile
 
-# Requirements backup
-requirements.txt.bak
-
-# Artifacts and temporary files
-=1.0.0
+# Memory dumps
+*.dump
+*.dmp
+gemini.md
+log.txt
+MUSICAL_INTELLIGENCE_IMPLEMENTATION.md
+System_FULL_Audit-Bericht_-_Neuromorphe_Traum-Engine.md
+System-Audit-Bericht_Neuromorphe_Traum-Engine_2025.md
+.trae/rules/project_rules.md
+processed_database/stems.db
+*.db   
+*.bat  
+project_rules.md
+processed_database/stems.db
+AUDIO_ROUTER_DEBUGGING.md
+processed_database/stems.db
+raw_construction_kits/test_bass_line.wav
+raw_construction_kits/test_kick_sample.wav
+raw_construction_kits/test_loop_melody.wav
+src/audio_files/0bdf5d10-d204-4a34-85fb-0eeaadbe84f4_embedding.npy
+src/audio_files/2ab90b65-81fa-4c19-b70a-39a933b47163_embedding.npy
+src/audio_files/5c67c81d-cf5f-4d1e-ad1f-abffec8cc424_embedding.npy
+src/audio_files/5f10cc6e-55c6-4741-b1a5-fbf9cbdfa65b_embedding.npy
+src/audio_files/6aa98409-8a95-4acb-ae07-96878b8951fd_embedding.npy
+src/audio_files/06b9b160-b9aa-4e73-8faa-34b90c8010f5_embedding.npy
+src/audio_files/7adf813e-8a6c-47b9-b9a0-2f43fa756c73_embedding.npy
+src/audio_files/7ddf1f1c-4494-4664-81d9-6746c8c4978d_embedding.npy
+src/audio_files/8ef60068-06f9-4ea4-9550-b377cdf18c82_embedding.npy
+src/audio_files/15f6900b-4973-4955-831f-ed7ce43b13d8_embedding.npy
+src/audio_files/19a83429-c5bb-44c5-84a0-8ca232f90200_embedding.npy
+src/audio_files/29f39edb-f2b0-4dd4-9709-5c5dbfc312e7_embedding.npy
+src/audio_files/32aab211-6e20-43bc-9ee4-cf796055b156_embedding.npy
+src/audio_files/50eb69e8-a39d-4f53-9a55-b3c177172065_embedding.npy
+src/audio_files/54f1ef4f-7ac4-47cb-8940-f2f94270f143_embedding.npy
+src/audio_files/55ee4b35-ae3c-4711-8188-26f6f01c3ae1_embedding.npy
+src/audio_files/58fe3947-673d-43f4-ae02-795e3560ea02_embedding.npy
+src/audio_files/59c9f677-c734-49cd-a28f-1db425a08d1f_embedding.npy
+src/audio_files/70c0f00f-6abe-46fd-827b-d9fd8c27d0da_embedding.npy
+src/audio_files/96a117a4-68da-4ae6-be56-680cb9a8cb0a_embedding.npy
+src/audio_files/96fc421c-104b-4448-a3c3-339adcad8f1a_embedding.npy
+src/audio_files/364b259d-3e22-4ed9-ba22-1dfbbb73956b_embedding.npy
+src/audio_files/841d9698-ef34-46a6-89e2-7c56b77e7769_embedding.npy
+src/audio_files/01186ee9-d1fd-4b60-85f0-3c9adb650ec7_embedding.npy
+src/audio_files/1469da73-bc0e-46e5-b692-e96e63562012_embedding.npy
+src/audio_files/4064f182-c4ec-404a-9934-d8135f0518cf_embedding.npy
+src/audio_files/4376f3a0-b634-412f-9442-809b52288a3d_embedding.npy
+src/audio_files/9527d915-f92d-4e63-b6f6-7a43b0b90d9f_embedding.npy
+src/audio_files/664515c8-c539-4932-98c5-ddd73f6b86e4_embedding.npy
+src/audio_files/785172f8-6260-4861-924f-2dc40cc6d192_embedding.npy
+src/audio_files/951422c4-8137-4e39-acae-02469c3b0c55_embedding.npy
+src/audio_files/79538419-e2a0-477f-bb18-bd330484d525_embedding.npy
+src/audio_files/83955784-554d-47c2-8aa8-0d88013671e7_embedding.npy
+src/audio_files/90338534-7392-4264-9ddd-3d9248e2bb46_embedding.npy
+src/audio_files/a02fc195-ea40-4e3d-81c8-cf8e091d4477_embedding.npy
+src/audio_files/a18151ed-4fb6-4614-ac92-aeac82689830_embedding.npy
+src/audio_files/b1cc1026-7bef-4fd0-bd07-9e96e8635f71_embedding.npy
+src/audio_files/b393b425-928c-4c98-94df-fd8511f15b74_embedding.npy
+src/audio_files/bfa3ae0c-3eb9-4db7-b69d-891892b37dbf_embedding.npy
+src/audio_files/c5553edc-9048-4f81-9eb3-90bf7d8cca11_embedding.npy
+src/audio_files/c6460d80-31d9-479e-8bc6-b2d0b88ca310_embedding.npy
+src/audio_files/c41046ad-9ba6-44aa-b1a4-cef9c1606754_embedding.npy
+src/audio_files/cb9fc37e-becb-4052-8bc1-a130c2f19f80_embedding.npy
+src/audio_files/cecbcc7c-90b4-43b7-ace3-3b7b8e8b074f_embedding.npy
+src/audio_files/cf3c66c5-9011-4fe2-95a8-d3e09aded450_embedding.npy
+src/audio_files/d4a965b2-197e-4688-a715-cfa6466db39a_embedding.npy
+src/audio_files/d24e8660-6e59-453d-85cb-41022a2c876d_embedding.npy
+src/audio_files/d576c1c4-b691-47ef-bb42-ceef59e31205_embedding.npy
+src/audio_files/efdd96c0-4951-4dcb-a6e8-828fbf50e652_embedding.npy
+src/audio_files/f6a27a2b-ce3b-4971-a89b-b637c893c45b_embedding.npy
+src/audio_files/f72ee009-d4c4-4400-ba53-93cc8e8340c1_embedding.npy
+src/audio_files/fe67340e-0174-4bb8-a4c3-0ef2f443a488_embedding.npy
+raw_construction_kits/test_bass_line.wav
+raw_construction_kits/test_kick_sample.wav
+raw_construction_kits/test_loop_melody.wav

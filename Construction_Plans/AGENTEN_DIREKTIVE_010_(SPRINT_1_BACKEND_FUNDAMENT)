@@ -1,0 +1,94 @@
+HYPER-PROMPT v4.0
+AGENTEN-DIREKTIVE: 010 (SPRINT 1 - BACKEND FUNDAMENT)
+PROJEKT: Neuromorphe Traum-Engine v2.0
+REFERENZ-DOKUMENT: BACKEND_ARCHITECTURE_SPEC.md
+MISSION: Errichte das grundlegende, modulare FastAPI-Backend-System gemäß der Architektur-Spezifikation.
+BEGINN DER DIREKTIVE
+Du bist ein autonomer Python-Backend-Engineer. Deine Mission ist die Implementierung des grundlegenden FastAPI-Servers für die "Neuromorphe Traum-Engine". Du folgst dabei strikt den Prinzipien einer sauberen, modularen und erweiterbaren Software-Architektur.
+PHASE 1: PROJEKTSTRUKTUR AUFBAUEN
+Verzeichnisstruktur erstellen:
+Erstelle innerhalb des Projekt-Hauptverzeichnisses die folgende, saubere Verzeichnisstruktur für das Backend. Lösche, falls vorhanden, die alte main.py aus dem Root-Verzeichnis.
+Generated code
+/
+|-- src/
+|   |-- __init__.py             # Leere Datei
+|   |-- api/
+|   |   |-- __init__.py         # Leere Datei
+|   |   `-- endpoints/
+|   |       |-- __init__.py     # Leere Datei
+|   |       `-- health.py
+|   |-- core/
+|   |   |-- __init__.py         # Leere Datei
+|   |   `-- config.py
+|   `-- main.py                 # Haupt-Applikations-Datei
+`-- requirements.txt
+Use code with caution.
+Abhängigkeiten aktualisieren (requirements.txt):
+Stelle sicher, dass die requirements.txt-Datei mindestens die folgenden Einträge enthält. Füge sie hinzu, falls sie fehlen.
+Generated code
+fastapi
+uvicorn[standard]
+Use code with caution.
+PHASE 2: KONFIGURATION & APP-INITIALISIERUNG
+Konfigurations-Modul (src/core/config.py):
+Erstelle eine einfache Konfigurationsdatei. Wir nutzen hierfür keine komplexen Bibliotheken, sondern eine simple Python-Klasse.
+Generated python
+# src/core/config.py
+class Settings:
+    PROJECT_NAME: str = "Neuromorphe Traum-Engine v2.0"
+    API_V1_STR: str = "/api/v1"
+
+settings = Settings()
+Use code with caution.
+Python
+Haupt-Applikationsdatei (src/main.py):
+Dies ist der zentrale Einstiegspunkt, der die FastAPI-Anwendung erstellt und die Router einbindet.
+Generated python
+# src/main.py
+from fastapi import FastAPI
+from src.core.config import settings
+from src.api.endpoints import health
+
+# Erstelle die FastAPI-App-Instanz
+app = FastAPI(title=settings.PROJECT_NAME)
+
+# Binde den Health-Check-Router ein
+app.include_router(health.router, prefix="/system", tags=["system"])
+
+# Definiere einen einfachen Root-Endpunkt
+@app.get("/")
+def read_root():
+    return {"message": f"Willkommen bei der {settings.PROJECT_NAME}"}
+Use code with caution.
+Python
+PHASE 3: ERSTEN API-ENDPUNKT IMPLEMENTIEREN
+Health-Check-Router (src/api/endpoints/health.py):
+Wir erstellen einen dedizierten "Router" für System-Endpunkte. Der erste und wichtigste ist ein Health-Check, der bestätigt, dass der Server läuft.
+Generated python
+# src/api/endpoints/health.py
+from fastapi import APIRouter
+
+router = APIRouter()
+
+@router.get("/health", status_code=200)
+def check_health():
+    """
+    Überprüft den Status des API-Servers.
+    """
+    return {"status": "ok", "message": "API is running"}
+Use code with caution.
+Python
+PHASE 4: STARTFÄHIG MACHEN
+Server starten: Ein Entwickler muss in der Lage sein, den Server aus dem Projekt-Hauptverzeichnis heraus mit einem einzigen Befehl zu starten. Der Befehl lautet:
+Generated bash
+uvicorn src.main:app --reload
+Use code with caution.
+Bash
+ERFOLGSKRITERIEN:
+Die neue, modulare Verzeichnisstruktur unter src/ ist korrekt angelegt.
+Alle spezifizierten Python-Dateien (main.py, config.py, health.py) existieren mit dem korrekten Inhalt.
+Der Befehl uvicorn src.main:app --reload startet den Server ohne Fehler. Die Konsole zeigt an, dass die Anwendung unter http://127.0.0.1:8000 läuft.
+Ein Aufruf der URL http://127.0.0.1:8000 im Browser oder via curl liefert die Willkommensnachricht {"message":"Willkommen bei der Neuromorphe Traum-Engine v2.0"}.
+Ein Aufruf der URL http://127.0.0.1:8000/system/health liefert die Statusmeldung {"status":"ok","message":"API is running"} mit dem HTTP-Statuscode 200.
+Die automatisch generierte API-Dokumentation ist unter http://127.0.0.1:8000/docs erreichbar und zeigt den /system/health-Endpunkt korrekt an.
+ENDE DER DIREKTIVE

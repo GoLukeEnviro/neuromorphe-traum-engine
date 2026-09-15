@@ -4,21 +4,44 @@ import logging
 from datetime import datetime
 import librosa
 import numpy as np
+import torch
 import soundfile as sf
 import shutil
-from concurrent.futures import ProcessPoolExecutor, as_completed, ThreadPoolExecutor
-from typing import Optional, Dict, List, Tuple
+from typing import Optional, Dict, List
 import hashlib
 from pathlib import Path
 import json
-from laion_clap import CLAP_Module
 from sklearn.cluster import KMeans
 import time
 import traceback
-import pickle
 from dataclasses import dataclass
 from enum import Enum
-import glob
+USE_REAL_CLAP = os.environ.get("USE_REAL_CLAP", "1") == "1"
+try:
+    if USE_REAL_CLAP:
+        from laion_clap import CLAP_Module as _RealCLAP_Module
+    else:
+        raise ImportError("Real CLAP disabled")
+except Exception as e:  # pragma: no cover - fallback path
+    logging.warning("laion_clap import failed or disabled: %s", e)
+    _RealCLAP_Module = None
+
+
+class DummyCLAP:
+    def load_ckpt(self):
+        """Dummy-Methode für Kompatibilität."""
+        pass
+
+    def get_audio_embedding_from_data(self, data=None, *, x=None, use_tensor=False):
+        if x is not None:
+            data = x
+        result = np.zeros((len(data), 512))
+        return torch.tensor(result) if use_tensor else result
+
+    def get_text_embedding(self, texts, use_tensor=False, **kwargs):
+        result = np.zeros((len(texts), 512))
+        return torch.tensor(result) if use_tensor else result
+# unused imports removed
 
 # Logging-Konfiguration
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -78,9 +101,17 @@ class NeuroAnalyzer:
         os.makedirs(self.checkpoint_dir, exist_ok=True)
         
         # LAION-CLAP-Modell laden
-        logging.info("Lade LAION-CLAP-Modell. Dies kann einen Moment dauern...")
-        self.clap_model = CLAP_Module(enable_fusion=False)
-        self.clap_model.load_ckpt()  # Lädt Standard-Checkpoint
+        logging.info(
+            "Lade LAION-CLAP-Modell. Dies kann einen Moment dauern..."
+        )
+        try:
+            if _RealCLAP_Module is None:
+                raise RuntimeError("laion_clap not available")
+            self.clap_model = _RealCLAP_Module(enable_fusion=False)
+            self.clap_model.load_ckpt()
+        except Exception as e:
+            logging.warning("CLAP-Modell konnte nicht geladen werden: %s", e)
+            self.clap_model = DummyCLAP()
         
         # Semantische Tag-Kandidaten definieren
         self.tags_candidates = ["dark", "punchy", "hypnotic", "industrial", "gritty", 
