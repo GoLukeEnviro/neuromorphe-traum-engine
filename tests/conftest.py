@@ -105,17 +105,50 @@ async def test_db_session(db_session):
 
 
 @pytest.fixture(scope="function")
-def test_client(test_settings: Settings, db_session: AsyncSession) -> Generator[TestClient, None, None]:
-    """FastAPI Test-Client"""
-    
-    # Dependency Override für Datenbank
+def test_client(test_settings: Settings, db_session: AsyncSession, monkeypatch) -> Generator[TestClient, None, None]:
+    """FastAPI Test-Client.
+
+    Wichtig: Es wird nicht nur ``get_async_db_session`` überschrieben, sondern
+    auch ``get_database_manager``. Die API-Router nutzen den Manager direkt
+    (``Depends(get_db_manager)``); ohne diesen zweiten Override würden Tests
+    auf die ECHTE Produktionsdatenbank unter ``processed_database/stems.db``
+    schreiben. Der Manager wird deshalb auf eine temporäre SQLite-Datei
+    umgebogen.
+    """
+    import tempfile
+    from database.database import DatabaseManager, get_database_manager
+
+    tmpdir = tempfile.mkdtemp(prefix="nt-test-db-")
+    test_db_path = Path(tmpdir) / "test_api.db"
+
+    # Eigenen Manager für die Testdauer erzeugen und global einsetzen.
+    isolated_settings = Settings(
+        DATABASE_URL=f"sqlite:///{test_db_path}", LOG_LEVEL="DEBUG"
+    )
+    isolated_manager = DatabaseManager(isolated_settings)
+
+    monkeypatch.setattr(
+        "database.database._database_manager", isolated_manager, raising=False
+    )
+    monkeypatch.setattr(
+        "database.database.get_database_manager", lambda: isolated_manager, raising=False
+    )
+
+    # Test-DB initialisieren (Tabellen anlegen) und Manager global ersetzen.
+    import asyncio as _asyncio
+
+    _asyncio.run(isolated_manager.create_tables())
+
+    # Dependency Override für Datenbank-Session
     async def override_get_db_session() -> AsyncGenerator[AsyncSession, None]:
         yield db_session
-    
+
     app.dependency_overrides[get_async_db_session] = override_get_db_session
-    
+
     with TestClient(app) as c:
         yield c
+
+    app.dependency_overrides.pop(get_async_db_session, None)
 
 
 @pytest.fixture(scope="function")
