@@ -1,6 +1,7 @@
 """Schema-Module für die Neuromorphe Traum-Engine."""
 
 from .stem import *
+from .stem import StemAnalysis, StemSearch, StemBatch, StemFeatures, StemMetadata
 from .base import TimestampMixin
 from .api import *
 from .render import RenderOutput
@@ -18,6 +19,12 @@ from audio.schemas import (
 __all__ = [
     # From base.py
     "TimestampMixin",
+    # From stem.py (explizit, da nicht in __all__ von stem.py)
+    "StemAnalysis",
+    "StemSearch",
+    "StemBatch",
+    "StemFeatures",
+    "StemMetadata",
     # From api.py
     "SearchRequest",
     # From arrangement.py

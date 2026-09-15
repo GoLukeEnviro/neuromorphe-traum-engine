@@ -11,7 +11,8 @@ from pydantic import ValidationError
 from schemas.stem import (
     StemBase, StemCreate, StemUpdate, StemResponse,
     StemSearchRequest, StemMetadata, StemFeatures,
-    StemAnalysisRequest, StemSimilarity, StemBatchResponse
+    StemAnalysisRequest, StemSimilarity, StemBatchResponse,
+    StemSearch, StemAnalysis, StemBatch,
 )
 
 

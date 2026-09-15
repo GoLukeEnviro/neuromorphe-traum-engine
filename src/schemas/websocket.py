@@ -1,7 +1,7 @@
 """WebSocket-Schemata für die Neuromorphe Traum-Engine."""
 
-from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, ConfigDict
+from typing import Any, Dict, List, Optional, Union
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from datetime import datetime
 from enum import Enum
 
@@ -13,6 +13,7 @@ class MessageType(str, Enum):
     HEARTBEAT = "heartbeat"
     STATUS_UPDATE = "status_update"
     PROGRESS_UPDATE = "progress_update"
+    RENDER_PROGRESS = "render_progress"
     ERROR = "error"
     NOTIFICATION = "notification"
     COMMAND = "command"
@@ -34,25 +35,60 @@ class ClientInfo(BaseModel):
 
 
 class WebSocketMessage(BaseModel):
-    """Schema für WebSocket-Nachrichten."""
-    message_id: str
-    type: MessageType
+    """Schema für WebSocket-Nachrichten.
+
+    ``event`` ist der gebräuchliche Alias für ``type``; beide Schreibweisen
+    werden akzeptiert.
+    """
+    message_id: Optional[str] = None
+    type: Optional[Union[MessageType, str]] = None
+    event: Optional[str] = None
     payload: Optional[Dict[str, Any]] = None
-    timestamp: datetime = datetime.now()
+    data: Optional[Dict[str, Any]] = None
+    timestamp: datetime = Field(default_factory=datetime.now)
     client_id: Optional[str] = None
-    
-    model_config = ConfigDict(from_attributes=True)
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize(cls, data):
+        if isinstance(data, dict):
+            data = dict(data)
+            # 'event' allein gesetzt: als Nachrichtentyp übernehmen
+            if "event" in data and "type" not in data:
+                data["type"] = data["event"]
+            # 'payload' und 'data' sind Synonyme
+            if "data" in data and "payload" not in data:
+                data["payload"] = data["data"]
+            elif "payload" in data and "data" not in data:
+                data["data"] = data["payload"]
+        return data
 
 
 class WebSocketResponse(BaseModel):
-    """Schema für WebSocket-Antworten."""
-    message_id: str
-    success: bool
+    """Schema für WebSocket-Antworten.
+
+    ``status`` ist der von Clients genutzte Begriff ("success" / "error"),
+    zusätzlich wird das boolesche ``success`` mitgeführt.
+    """
+    message_id: Optional[str] = None
+    status: Optional[str] = None
+    message: Optional[str] = None
+    success: Optional[bool] = None
     data: Optional[Any] = None
     error: Optional[str] = None
-    timestamp: datetime = datetime.now()
-    
+    timestamp: datetime = Field(default_factory=datetime.now)
+
     model_config = ConfigDict(from_attributes=True)
+
+    @model_validator(mode="after")
+    def _sync_status(self) -> "WebSocketResponse":
+        if self.status is None and self.success is not None:
+            self.status = "success" if self.success else "error"
+        if self.success is None and self.status is not None:
+            self.success = self.status == "success"
+        return self
 
 
 class SubscriptionRequest(BaseModel):

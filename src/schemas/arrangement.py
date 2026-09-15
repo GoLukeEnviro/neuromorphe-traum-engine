@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from typing import Any, Optional, List, Dict
 
 
@@ -17,11 +17,27 @@ class ArrangementSection(BaseModel):
 
 
 class ArrangementTransition(BaseModel):
+    """Übergang zwischen zwei Sektionen.
+
+    ``type`` ist der kanonische Feldname; ``transition_type`` wird als
+    Alias weiter akzeptiert.
+    """
     from_section: str
     to_section: str
-    transition_type: str
-    duration_bars: int
+    type: Optional[str] = None
+    transition_type: Optional[str] = None
+    duration_bars: int = 0
     effects: Optional[List[str]] = None
+
+    model_config = {"populate_by_name": True}
+
+    @model_validator(mode="after")
+    def _sync_type(self) -> "ArrangementTransition":
+        if self.type is None and self.transition_type is not None:
+            self.type = self.transition_type
+        if self.transition_type is None and self.type is not None:
+            self.transition_type = self.type
+        return self
 
 
 class ArrangementStructure(BaseModel):
@@ -50,10 +66,11 @@ class ArrangementUpdate(BaseModel):
 
 
 class ArrangementBase(BaseModel):
-    bpm: int
-    total_bars: int
-    track_structure: Dict[str, Any]
-    stems: List[int]
+    """Basis-Schema für ein Arrangement."""
+    bpm: int = Field(..., gt=0, le=300)
+    total_bars: int = Field(..., gt=0)
+    track_structure: Dict[str, Any] = Field(..., min_length=1)
+    stems: List[int] = Field(..., min_length=1)
 
 
 class ArrangementResponse(BaseModel):

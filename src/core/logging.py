@@ -31,6 +31,29 @@ class ColoredFormatter(logging.Formatter):
         'RESET': '\033[0m'        # Reset
     }
     
+    def __init__(self, *args, use_color: Optional[bool] = None, **kwargs):
+        """Initialisiert den Formatter.
+
+        Args:
+            use_color: Farbausgabe erzwingen (True) oder unterdrücken (False).
+                Ohne Angabe wird Farbe immer erzeugt; ein Aufrufer, der nur
+                für echte Terminals färben will, übergibt ``use_color``
+                explizit (z. B. über :meth:`detect`).
+        """
+        super().__init__(*args, **kwargs)
+        self.use_color = True if use_color is None else use_color
+
+    @classmethod
+    def detect(cls, *args, **kwargs) -> "ColoredFormatter":
+        """Erzeugt einen Formatter, der nur an echten Terminals färbt."""
+        kwargs["use_color"] = bool(
+            hasattr(sys.stderr, "isatty") and sys.stderr.isatty()
+        )
+        return cls(*args, **kwargs)
+
+    def _should_colorize(self) -> bool:
+        return bool(self.use_color)
+
     def format(self, record: logging.LogRecord) -> str:
         """Formatiert den Log-Record mit Farbcodes."""
         # Farbe basierend auf Log-Level
@@ -40,8 +63,8 @@ class ColoredFormatter(logging.Formatter):
         # Original-Formatter anwenden
         formatted: str = super().format(record)
         
-        # Farbe nur für Terminal-Output
-        if hasattr(sys.stderr, 'isatty') and sys.stderr.isatty():
+        # Farbe nur für Terminal-Output (oder wenn explizit angefordert)
+        if self._should_colorize():
             return f"{color}{formatted}{reset}"
         return formatted
 
@@ -189,8 +212,8 @@ class LoggerManager:
         handler: logging.Handler = logging.StreamHandler(sys.stdout)
         
         if self.settings.DEBUG or self.settings.DEVELOPMENT_MODE:
-            # Farbiger Formatter für Entwicklung
-            formatter: logging.Formatter = ColoredFormatter(
+            # Farbiger Formatter für Entwicklung (nur an echten Terminals)
+            formatter: logging.Formatter = ColoredFormatter.detect(
                 fmt='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                 datefmt='%H:%M:%S'
             )
