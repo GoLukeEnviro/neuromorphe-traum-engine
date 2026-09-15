@@ -416,14 +416,14 @@ class TestStemEndpoints:
     
     def test_search_stems(self, test_client: TestClient):
         """Test: Stems suchen"""
-        with patch('src.database.database.get_database_manager') as mock_get_db_manager:
-            mock_search.return_value = {
-                "stems": [
-                    {"id": "1", "name": "Kick 1", "type": "kick"},
-                    {"id": "2", "name": "Kick 2", "type": "kick"}
-                ],
-                "total": 2
-            }
+        # Hinweis: Der Aufruf im Testrumpf war fehlerhaft — `mock_search` war
+        # nie definiert, gepatcht wurde stattdessen bereits `get_database_manager`.
+        # Korrekt ist der Patch des Manager-Aufrufs selbst.
+        with patch('src.database.manager.DatabaseManager.search_stems') as mock_search:
+            mock_search.return_value = [
+                {"id": "1", "name": "Kick 1", "type": "kick"},
+                {"id": "2", "name": "Kick 2", "type": "kick"},
+            ]
             
             response = test_client.get(
                 "/api/v1/stems/search?query=kick&type=kick&genre=techno"
@@ -438,7 +438,10 @@ class TestStemEndpoints:
         """Test: Stem-Metadaten aktualisieren"""
         stem_id = "stem_123"
         
-        with patch('src.database.manager.DatabaseManager.get_render_job') as mock_get:
+        # Hinweis: Hier wurde versehentlich `get_render_job` gepatcht und
+        # `mock_update` benutzt, ohne je definiert zu werden. Korrekt ist der
+        # Patch der tatsächlich aufgerufenen Methode.
+        with patch('src.database.manager.DatabaseManager.update_stem') as mock_update:
             mock_update.return_value = {
                 "id": stem_id,
                 "name": "Updated Kick",
@@ -461,7 +464,10 @@ class TestStemEndpoints:
         """Test: Stem löschen"""
         stem_id = "stem_123"
         
-        with patch('src.database.database.get_database_manager().delete_stem') as mock_delete:
+        # Hinweis: Das ursprüngliche Patch-Ziel war syntaktisch ungültig
+        # ('...get_database_manager().delete_stem' — mock akzeptiert keine
+        # Aufrufe im Zielpfad). Korrekt ist der Patch der Methode selbst.
+        with patch('src.database.manager.DatabaseManager.delete_stem') as mock_delete:
             mock_delete.return_value = True
             
             response = test_client.delete(f"/api/v1/stems/{stem_id}")

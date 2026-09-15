@@ -788,6 +788,79 @@ class PreprocessorService:
     # Einzeldatei-Verarbeitung
     # ------------------------------------------------------------------
 
+    async def process_audio(
+        self,
+        audio_input: Any,
+        filename: Optional[str] = None,
+        category: Optional[str] = None,
+        genre: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        session: Optional[Any] = None,
+    ) -> Dict[str, Any]:
+        """Verarbeitet Audio aus dem Speicher (Bytes) oder von einem Pfad.
+
+        Convenience-Einstieg für den Upload-Endpunkt: schreibt die Daten in
+        eine temporäre Datei, delegiert an :meth:`process_audio_file` und
+        reichert das Ergebnis um die übergebenen Metadaten an.
+
+        Args:
+            audio_input: Rohdaten als ``bytes`` oder ein Dateipfad.
+            filename: Ursprünglicher Dateiname (bestimmt das Format).
+            category: Stem-Kategorie (z. B. "kick").
+            genre: Genre-Angabe.
+            tags: Liste von Tags.
+            session: Optionale Datenbank-Session.
+        """
+        suffix = Path(filename or "").suffix.lower()
+        if suffix not in self.supported_formats:
+            suffix = ".wav"
+
+        cleanup_path: Optional[str] = None
+        if isinstance(audio_input, (bytes, bytearray)):
+            import tempfile
+
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                tmp.write(bytes(audio_input))
+                cleanup_path = tmp.name
+            file_path = cleanup_path
+        else:
+            file_path = str(audio_input)
+
+        try:
+            result = await self.process_audio_file(
+                file_path, session=session, category=category
+            )
+        finally:
+            if cleanup_path is not None:
+                Path(cleanup_path).unlink(missing_ok=True)
+
+        if not isinstance(result, dict):
+            result = {"stem_id": str(result)}
+
+        features = result.get("features")
+        if not isinstance(features, dict):
+            features = {}
+        if result.get("duration") is not None:
+            features.setdefault("duration", result["duration"])
+        if result.get("sample_rate") is not None:
+            features.setdefault("sample_rate", result["sample_rate"])
+
+        metadata = result.get("metadata")
+        if not isinstance(metadata, dict):
+            metadata = {}
+        if category:
+            metadata.setdefault("type", category)
+        if genre:
+            metadata.setdefault("genre", genre)
+        if tags:
+            metadata.setdefault("tags", list(tags))
+        if filename:
+            metadata.setdefault("filename", filename)
+
+        result["features"] = features
+        result["metadata"] = metadata
+        return result
+
     async def process_audio_file(
         self,
         file_path: str,

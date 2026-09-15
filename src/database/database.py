@@ -999,6 +999,98 @@ class DatabaseManager:
             "per_page": per_page,
         }
     
+    # --- Arrangements --------------------------------------------------
+    
+    def _arrangement_to_dict(self, arrangement: Arrangement) -> Dict[str, Any]:
+        """Arrangement als Dict serialisieren (inkl. historischer Alias-Namen)."""
+        data = arrangement.to_dict()
+        for key in ("created_at", "updated_at"):
+            data.pop(key, None)
+        data["arrangement_id"] = arrangement.id
+        data["structure"] = arrangement.track_structure or {"sections": []}
+        data["metadata"] = arrangement.arrangement_metadata or {}
+        return data
+    
+    async def create_arrangement(self, arrangement_data: Dict[str, Any]) -> str:
+        """Arrangement erstellen und seine ID zurückgeben."""
+        data = dict(arrangement_data)
+        data.pop("id", None)
+        data.setdefault("prompt", "")
+        data.setdefault("status", "completed")
+        if "structure" in data and "track_structure" not in data:
+            data["track_structure"] = data.pop("structure")
+        if isinstance(data.get("track_structure"), dict):
+            data["track_structure"] = data["track_structure"]
+        
+        async with self.get_async_session() as session:
+            arrangement = Arrangement(**data)
+            session.add(arrangement)
+            await session.flush()
+            arrangement_id = arrangement.id
+        
+        self.logger.info(f"Arrangement created: {arrangement_id}")
+        return arrangement_id
+    
+    async def get_arrangement(self, arrangement_id: Any) -> Optional[Dict[str, Any]]:
+        """Arrangement als Dict abrufen."""
+        async with self.get_async_session() as session:
+            arrangement = await session.get(Arrangement, arrangement_id)
+            if arrangement is None:
+                return None
+            return self._arrangement_to_dict(arrangement)
+    
+    async def update_arrangement(
+        self, arrangement_id: Any, update_data: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """Arrangement aktualisieren und den neuen Stand zurückgeben."""
+        data = dict(update_data)
+        data.pop("id", None)
+        if "structure" in data and "track_structure" not in data:
+            data["track_structure"] = data.pop("structure")
+        
+        async with self.get_async_session() as session:
+            arrangement = await session.get(Arrangement, arrangement_id)
+            if arrangement is None:
+                return None
+            for key, value in data.items():
+                if hasattr(arrangement, key):
+                    setattr(arrangement, key, value)
+            await session.flush()
+            return self._arrangement_to_dict(arrangement)
+    
+    async def delete_arrangement(self, arrangement_id: Any) -> bool:
+        """Arrangement löschen."""
+        async with self.get_async_session() as session:
+            arrangement = await session.get(Arrangement, arrangement_id)
+            if arrangement is None:
+                return False
+            await session.delete(arrangement)
+            return True
+    
+    async def list_arrangements(
+        self, page: int = 1, per_page: int = 10
+    ) -> Dict[str, Any]:
+        """Arrangements paginieren."""
+        offset = max(0, (page - 1) * per_page)
+        async with self.get_async_session() as session:
+            total = (
+                await session.execute(select(func.count(Arrangement.id)))
+            ).scalar() or 0
+            result = await session.execute(
+                select(Arrangement).order_by(Arrangement.created_at.desc())
+                .offset(offset).limit(per_page)
+            )
+            arrangements = [
+                self._arrangement_to_dict(a) for a in result.scalars().all()
+            ]
+        
+        return {
+            "arrangements": arrangements,
+            "total": int(total),
+            "page": page,
+            "per_page": per_page,
+        }
+    
     # --- Render Jobs ---------------------------------------------------
     
     async def create_render_job(self, job_data: Dict[str, Any]) -> str:

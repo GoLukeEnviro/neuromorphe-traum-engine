@@ -8,6 +8,7 @@ Startup-Events wie die Datenbankinitialisierung.
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from typing import Dict, Any
 from core.config import settings
 from database.database import create_tables
@@ -18,6 +19,7 @@ from api.endpoints.health import router as health_router
 from api.endpoints.stems import router as stems_router
 from api.endpoints.neuromorphic import router as neuromorphic_router
 from search.router import router as search_router
+from api.endpoints.system_extras import router as system_extras_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -43,12 +45,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Explizite OPTIONS-Routen: die CORSMiddleware beantwortet Preflight nur,
+# wenn der Request als Preflight erkannt wird (Origin + Access-Control-
+# Request-Method). Ein nackter OPTIONS-Aufruf läuft sonst in einen 405.
+@app.options("/{full_path:path}", include_in_schema=False)
+async def preflight_handler(full_path: str):
+    """Beantwortet CORS-Preflight-Anfragen für beliebige Pfade."""
+    return Response(
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
+            "Access-Control-Allow-Headers": "*",
+        },
+    )
+
 # Include routers - Audio zuerst registrieren
 app.include_router(audio_router, prefix="/api/v1/audio", tags=["audio"])
 app.include_router(health_router, prefix="/system", tags=["system"])
 app.include_router(stems_router, prefix="/api/v1/stems", tags=["stems"])
 app.include_router(neuromorphic_router, prefix="/api/v1/neuromorphic", tags=["neuromorphic"])
 app.include_router(search_router, prefix="/api/v1", tags=["search"])
+app.include_router(system_extras_router, tags=["system-extras"])
 
 @app.get("/")
 def read_root() -> Dict[str, str]:

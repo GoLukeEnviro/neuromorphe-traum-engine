@@ -22,6 +22,11 @@ sys.path.insert(0, str(root_dir))
 # Add src directory to Python path
 sys.path.insert(0, str(root_dir / "src"))
 
+# src.X und X auf dieselben Modulobjekte abbilden, damit patch()-Ziele in der
+# Test-Suite (z. B. src.services.renderer.RendererService) auch für den
+# Produktivcode (services.renderer) wirksam sind.
+import _src_alias  # noqa: E402,F401
+
 # Test-spezifische Imports
 from core.config import Settings
 from database.database import get_async_db_session

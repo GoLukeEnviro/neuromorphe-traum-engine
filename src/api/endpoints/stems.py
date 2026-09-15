@@ -65,13 +65,36 @@ async def get_stems(
     stems = await db_service.get_all_stems(skip=skip, limit=limit)
     return stems
 
-@router.get("/{stem_id}", response_model=StemResponse)
+@router.get("/search")
+async def search_stems_by_query(
+    query: Optional[str] = Query(None),
+    type: Optional[str] = Query(None),
+    genre: Optional[str] = Query(None),
+    limit: int = Query(20, ge=1, le=100),
+    db_service: DatabaseService = Depends(get_database_service)
+):
+    """Sucht Stems.
+
+    Muss VOR ``/{stem_id}`` stehen: Starlette prüft Routen in
+    Registrierungsreihenfolge, sonst schluckt der Catch-all diesen Pfad.
+    """
+    manager = get_database_manager()
+    stems = await manager.search_stems(
+        query=query, category=type, genre=genre, limit=limit
+    )
+    return {"stems": stems, "total": len(stems)}
+
+
+@router.get("/{stem_id}")
 async def get_stem(
-    stem_id: int,
+    stem_id: str,
     db_service: DatabaseService = Depends(get_database_service)
 ):
     """Get a specific stem by ID"""
-    stem = await db_service.get_stem_by_id(stem_id=stem_id)
+    # Der Manager liefert Dicts inkl. der historischen Feldnamen (name/type/…)
+    # und ist das Patch-Ziel der API-Tests.
+    manager = get_database_manager()
+    stem = await manager.get_stem(stem_id)
     if stem is None:
         raise HTTPException(status_code=404, detail="Stem not found")
     return stem
