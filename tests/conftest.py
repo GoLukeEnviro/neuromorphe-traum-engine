@@ -230,12 +230,21 @@ def temp_dir() -> Generator[Path, None, None]:
 
 
 @pytest.fixture(scope="session")
-async def db_engine():
+def db_engine():
+    """Async-Engine für die Sandbox-Datenbank (Session-Scope).
+
+    Bewusst ein *synchroner* Fixture im Stil von
+    ``initialize_sandbox_database``: ein session-scoped ``async def``-Fixture
+    verlangt einen session-weiten Event-Loop, den die in ``requirements.txt``
+    gepinnte ``pytest-asyncio``-Version (0.21.x) nicht bereitstellt
+    (``ScopeMismatch``). Das Setup/Teardown läuft daher wie dort über
+    ``asyncio.run``.
+    """
     engine_file = SANDBOX_DIRS["processed_database"] / "engine.db"
     engine = create_async_engine(f"sqlite+aiosqlite:///{engine_file}")
-    await create_tables(engine)
+    asyncio.run(create_tables(engine))
     yield engine
-    await engine.dispose()
+    asyncio.run(engine.dispose())
 
 
 @pytest.fixture

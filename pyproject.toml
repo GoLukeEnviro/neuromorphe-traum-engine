@@ -24,3 +24,55 @@ where = ["src"]
 pythonpath = ["src"]
 testpaths = ["tests"]
 addopts = "--import-mode=importlib -ra"
+
+[tool.ruff]
+# Konfiguration für `ruff check .` — wird von .github/workflows/ci.yml (Job
+# "lint") genutzt.
+target-version = "py311"
+line-length = 100
+
+# Nur Quellcode linten: keine zur Laufzeit erzeugten Datenverzeichnisse und
+# keine Vendored-/Build-Artefakte.
+exclude = [
+    ".git",
+    ".venv",
+    "venv",
+    "build",
+    "dist",
+    "__pycache__",
+    ".benchmarks",
+    ".pytest_cache",
+    "audio_files",
+    "dataaudio",
+    "datadatabase",
+    "dataembeddings",
+    "generated_stems",
+    "logs",
+    "models",
+    "node_modules",
+    "processed_database",
+    "raw_construction_kits",
+    "rendered_tracks",
+    "stereo_tracks_for_analysis",
+    "test_cache",
+    "test_data",
+]
+
+[tool.ruff.lint]
+# Regel-Familien wie im Ruff-Default (Pyflakes + pycodestyle-Teilmenge).
+# Bewusst schlank: der Bestand ist historisch gewachsen.
+select = ["E4", "E7", "E9", "F"]
+
+# Legacy-Bestand. Jede Regel hat 20+ Fundstellen über Produktions- und
+# Testcode; ein repo-weiter Sweep gehört nicht in diesen CI-PR. Die Regeln
+# werden in Folge-PRs einzeln wieder aktiviert.
+ignore = [
+    "E402", # Modul-Import nicht am Dateikopf (Import nach Env-Setup nötig)
+    "E712", # Vergleich mit True/False
+    "E722", # nacktes `except` (Legacy-Frontend)
+    "F401", # ungenutzter Import
+    "F403", # Wildcard-Import
+    "F405", # Name stammt aus Wildcard-Import
+    "F541", # f-String ohne Platzhalter
+    "F841", # ungenutzte lokale Variable
+]
