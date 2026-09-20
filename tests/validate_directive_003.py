@@ -7,22 +7,36 @@ Validierung für AGENTEN_DIREKTIVE_003
 import sqlite3
 import json
 import os
+import sys
 from datetime import datetime
+from typing import Optional
 
-def validate_directive_003():
+def resolve_db_path(db_path: Optional[str] = None) -> str:
+    """DB-Pfad auflösen: Argument > ``NEUROMORPHE_DB_PATH`` > Produktions-Default."""
+    return db_path or os.environ.get("NEUROMORPHE_DB_PATH") or "processed_database/stems.db"
+
+def validate_directive_003(db_path: Optional[str] = None):
     """
     Validiert die Erfolgskriterien von AGENTEN_DIREKTIVE_003:
     1. Drei neue Test-Audiodateien wurden verarbeitet
     2. Korrekte Kategorisierung (kick, bass, unknown für loop)
     3. Tags-Feld enthält JSON-String mit 3 Tags
     4. Alle Einträge haben quality_ok=True
+
+    Args:
+        db_path: Pfad zur SQLite-Datenbank. Default: ``NEUROMORPHE_DB_PATH``
+            oder ``processed_database/stems.db`` (Produktions-Default).
+
+    Returns:
+        bool: True, wenn die Erfolgskriterien erfüllt sind.
     """
     
     print("🔍 VALIDIERUNG AGENTEN_DIREKTIVE_003")
     print("=" * 50)
     
-    # Datenbankverbindung
-    db_path = "processed_database/stems.db"
+    # Datenbankverbindung (Pfad injizierbar)
+    db_path = resolve_db_path(db_path)
+    print(f"📂 Datenbank: {db_path}")
     if not os.path.exists(db_path):
         print("❌ Datenbank nicht gefunden!")
         return False
@@ -115,4 +129,5 @@ def validate_directive_003():
         return False
 
 if __name__ == "__main__":
-    validate_directive_003()
+    # Echter Exit-Code: ein nicht erfülltes Kriterium darf nicht als Erfolg enden.
+    sys.exit(0 if validate_directive_003() else 1)

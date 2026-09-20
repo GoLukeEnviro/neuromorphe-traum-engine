@@ -179,9 +179,9 @@ class TrainingService:
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.executor = ThreadPoolExecutor(max_workers=1)
         
-        # Verzeichnisse
-        self.models_dir = Path("models")
-        self.models_dir.mkdir(exist_ok=True)
+        # Verzeichnisse (injizierbar ueber MODEL_CACHE_DIR/Umgebung; Default unveraendert)
+        self.models_dir = Path(settings.MODEL_CACHE_DIR or "models")
+        self.models_dir.mkdir(parents=True, exist_ok=True)
         
         logger.info(f"TrainingService initialisiert, Device: {self.device}")
     

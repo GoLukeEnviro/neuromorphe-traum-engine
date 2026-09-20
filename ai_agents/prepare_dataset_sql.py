@@ -70,13 +70,28 @@ class ProcessingResult:
     retry_count: int = 0
     processing_time: float = 0.0
 
-# Datenbank-Definition
-DB_PATH = "processed_database/stems.db"
+# Datenbank- und Verzeichnis-Definitionen.
+# Die Defaults gelten unveraendert fuer den Produktivbetrieb, lassen sich aber
+# per Umgebungsvariable (oder Konstruktor-Parameter) ueberschreiben. Tests
+# koennen so vollstaendig in temporaere Verzeichnisse ausweichen.
+def _env_path(variable: str, default: str) -> str:
+    """Pfad aus der Umgebung lesen, sonst den Default verwenden."""
+    return os.environ.get(variable) or default
+
+
+DB_PATH = _env_path("NEUROMORPHE_DB_PATH", "processed_database/stems.db")
+CHECKPOINT_DIR = _env_path("NEUROMORPHE_CHECKPOINT_DIR", "processed_database/checkpoints")
+PROCESSED_STEMS_DIR = _env_path("NEUROMORPHE_STEMS_DIR", "processed_database/stems")
+QUARANTINE_DIR = _env_path("NEUROMORPHE_QUARANTINE_DIR", "processed_database/quarantine")
 
 class NeuroAnalyzer:
-    def __init__(self, input_dir: str, resume_from_checkpoint: bool = True, 
-                 batch_size: int = BATCH_SIZE, max_retries: int = MAX_RETRIES, 
-                 checkpoint_interval: int = CHECKPOINT_INTERVAL):
+    def __init__(self, input_dir: str, resume_from_checkpoint: bool = True,
+                 batch_size: int = BATCH_SIZE, max_retries: int = MAX_RETRIES,
+                 checkpoint_interval: int = CHECKPOINT_INTERVAL,
+                 db_path: Optional[str] = None,
+                 checkpoint_dir: Optional[str] = None,
+                 stems_dir: Optional[str] = None,
+                 quarantine_dir: Optional[str] = None):
         """
         Initialisiert den Neuro-Analysator.
         
@@ -86,6 +101,14 @@ class NeuroAnalyzer:
             batch_size (int): Batch-Größe für CLAP-Verarbeitung.
             max_retries (int): Maximale Anzahl von Wiederholungsversuchen.
             checkpoint_interval (int): Intervall für Checkpoint-Speicherung.
+            db_path (Optional[str]): Pfad zur SQLite-Datenbank. Default:
+                ``NEUROMORPHE_DB_PATH`` oder ``processed_database/stems.db``.
+            checkpoint_dir (Optional[str]): Verzeichnis für Checkpoint-Dateien.
+            stems_dir (Optional[str]): Zielverzeichnis für standardisierte Stems.
+            quarantine_dir (Optional[str]): Verzeichnis für Quarantäne-Dateien.
+
+        Hinweis: Der Konstruktor hat bewusst keine Seiteneffekte auf das
+        Dateisystem — Verzeichnisse werden erst beim Schreiben angelegt.
         """
         logging.info("Initialisiere Neuro-Analysator...")
         self.input_dir = input_dir
@@ -94,11 +117,20 @@ class NeuroAnalyzer:
         self.max_retries = max_retries
         self.checkpoint_interval = checkpoint_interval
         
-        # Checkpoint- und Status-Dateien
-        self.checkpoint_dir = "processed_database/checkpoints"
+        # Pfade sind injizierbar: Konstruktor-Parameter > Umgebungsvariable > Default.
+        self.db_path = db_path or _env_path("NEUROMORPHE_DB_PATH", DB_PATH)
+        self.checkpoint_dir = checkpoint_dir or _env_path(
+            "NEUROMORPHE_CHECKPOINT_DIR", CHECKPOINT_DIR
+        )
+        self.stems_dir = stems_dir or _env_path("NEUROMORPHE_STEMS_DIR", PROCESSED_STEMS_DIR)
+        self.quarantine_dir = quarantine_dir or _env_path(
+            "NEUROMORPHE_QUARANTINE_DIR", QUARANTINE_DIR
+        )
+
+        # Checkpoint- und Status-Dateien. Das Verzeichnis wird erst beim
+        # tatsächlichen Schreiben erzeugt (kein Seiteneffekt im Konstruktor).
         self.progress_file = os.path.join(self.checkpoint_dir, "progress.json")
         self.failed_files_log = os.path.join(self.checkpoint_dir, "failed_files.json")
-        os.makedirs(self.checkpoint_dir, exist_ok=True)
         
         # LAION-CLAP-Modell laden
         logging.info(
@@ -139,13 +171,22 @@ class NeuroAnalyzer:
         Erstellt die SQLite-Datenbank und die 'stems'-Tabelle, falls sie nicht existiert.
         Das Schema muss exakt den Spezifikationen entsprechen.
         """
-        logging.info(f"Initialisiere Datenbank unter: {DB_PATH}")
+        logging.info(f"Initialisiere Datenbank unter: {self.db_path}")
         
         # Stelle sicher, dass das Verzeichnis existiert
-        os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+        os.makedirs(os.path.dirname(os.path.abspath(self.db_path)), exist_ok=True)
+        
+        # Idempotent: eine bereits offene Verbindung zuerst schließen, sonst
+        # leakt ein zweiter init_db()-Aufruf eine Verbindung.
+        if getattr(self, "conn", None) is not None:
+            try:
+                self.conn.close()
+            except Exception:  # pragma: no cover - defensiv
+                pass
+            self.conn = None
         
         # Verbindung zur Datenbank herstellen und als Instanzvariable speichern
-        self.conn = sqlite3.connect(DB_PATH)
+        self.conn = sqlite3.connect(self.db_path)
         cursor = self.conn.cursor()
         
         # Erstelle die stems-Tabelle mit exakt den spezifizierten Spalten
@@ -249,7 +290,7 @@ class NeuroAnalyzer:
             set: Set der bereits verarbeiteten Dateipfade
         """
         try:
-            conn = sqlite3.connect(DB_PATH)
+            conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
             cursor.execute("""
@@ -274,11 +315,13 @@ class NeuroAnalyzer:
         Args:
             files (List[str]): Liste der zu verarbeitenden Dateien
         """
-        total_batches = (len(files) + BATCH_SIZE - 1) // BATCH_SIZE
+        batch_size = max(1, int(self.batch_size or BATCH_SIZE))
+        checkpoint_interval = max(1, int(self.checkpoint_interval or CHECKPOINT_INTERVAL))
+        total_batches = (len(files) + batch_size - 1) // batch_size
         
-        for batch_idx in range(0, len(files), BATCH_SIZE):
-            batch_files = files[batch_idx:batch_idx + BATCH_SIZE]
-            batch_num = (batch_idx // BATCH_SIZE) + 1
+        for batch_idx in range(0, len(files), batch_size):
+            batch_files = files[batch_idx:batch_idx + batch_size]
+            batch_num = (batch_idx // batch_size) + 1
             
             logging.info(f"Verarbeite Batch {batch_num}/{total_batches} ({len(batch_files)} Dateien)")
             
@@ -289,7 +332,7 @@ class NeuroAnalyzer:
             self._save_batch_results(batch_results)
             
             # Checkpoint speichern
-            if batch_num % CHECKPOINT_INTERVAL == 0:
+            if batch_num % checkpoint_interval == 0:
                 self._save_checkpoint()
                 logging.info(f"Checkpoint gespeichert nach Batch {batch_num}")
     
@@ -488,8 +531,8 @@ class NeuroAnalyzer:
         Returns:
             Dict: Metadaten-Dictionary
         """
-        # Standardisierte Datei speichern
-        stems_dir = "processed_database/stems"
+        # Standardisierte Datei speichern (injizierbares Zielverzeichnis)
+        stems_dir = self.stems_dir
         os.makedirs(stems_dir, exist_ok=True)
         
         # Eindeutige ID generieren
@@ -533,7 +576,7 @@ class NeuroAnalyzer:
         Args:
             results (List[ProcessingResult]): Liste der Verarbeitungsergebnisse
         """
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
         try:
@@ -601,6 +644,7 @@ class NeuroAnalyzer:
         Speichert einen Checkpoint des aktuellen Fortschritts.
         """
         try:
+            os.makedirs(self.checkpoint_dir, exist_ok=True)
             checkpoint_data = {
                 'timestamp': datetime.now().isoformat(),
                 'stats': self.stats.copy()
@@ -798,7 +842,7 @@ class NeuroAnalyzer:
             reason (str): Grund für die Quarantäne
         """
         try:
-            quarantine_dir = "processed_database/quarantine"
+            quarantine_dir = self.quarantine_dir
             os.makedirs(quarantine_dir, exist_ok=True)
             
             filename = os.path.basename(file_path)
@@ -947,7 +991,7 @@ class NeuroAnalyzer:
             metadata (dict): Das Dictionary mit den zu speichernden Metadaten.
         """
         try:
-            conn = sqlite3.connect(DB_PATH)
+            conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
             # Insert mit allen Spalten
@@ -990,6 +1034,14 @@ if __name__ == "__main__":
     parser.add_argument('--checkpoint-interval', type=int, default=CHECKPOINT_INTERVAL, help=f'Checkpoint save interval (default: {CHECKPOINT_INTERVAL})')
     parser.add_argument('--log-level', choices=['DEBUG', 'INFO', 'WARNING', 'ERROR'], default='INFO', help='Logging level')
     parser.add_argument('--input-dir', type=str, default='raw_construction_kits', help='Input directory for audio files')
+    parser.add_argument('--db-path', type=str, default=None,
+                        help='DB-Pfad (Default: NEUROMORPHE_DB_PATH)')
+    parser.add_argument('--checkpoint-dir', type=str, default=None,
+                        help='Checkpoint-Verzeichnis (Default: NEUROMORPHE_CHECKPOINT_DIR)')
+    parser.add_argument('--stems-dir', type=str, default=None,
+                        help='Stem-Verzeichnis (Default: NEUROMORPHE_STEMS_DIR)')
+    parser.add_argument('--quarantine-dir', type=str, default=None,
+                        help='Quarantaene-Verzeichnis (Default: NEUROMORPHE_QUARANTINE_DIR)')
     
     args = parser.parse_args()
     
@@ -1018,7 +1070,14 @@ if __name__ == "__main__":
     
     try:
         # Neuro-Analyzer initialisieren und ausführen
-        analyzer = NeuroAnalyzer(input_dir=args.input_dir, resume_from_checkpoint=args.resume)
+        analyzer = NeuroAnalyzer(
+            input_dir=args.input_dir,
+            resume_from_checkpoint=args.resume,
+            db_path=args.db_path,
+            checkpoint_dir=args.checkpoint_dir,
+            stems_dir=args.stems_dir,
+            quarantine_dir=args.quarantine_dir,
+        )
         analyzer.init_db()
         analyzer.run()
         

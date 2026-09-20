@@ -1,148 +1,127 @@
-#!/usr/bin/env python3
-"""
-Test-Skript für AGENTEN_DIREKTIVE_007 - Master MVP
-Automatisierte Tests für das komplette Text-zu-Stem Retrieval System
+"""Tests für das MVP-Suchsystem (``ai_agents.search_engine_cli.SearchEngine``).
+
+Ausgangslage (Defekt): ``test_system_components`` gab ausschließlich
+``True``/``False`` zurück (pytest verwirft Rückgabewerte → immer grün, „stilles
+Grün“) und las aus den Produktionspfaden ``raw_construction_kits/`` und
+``processed_database/embeddings.pkl``. ``demonstrate_search`` war reine
+Statusausgabe ganz ohne Assertion.
+
+Jetzt: echte Assertions auf einem temporären Embedding-Index in ``tmp_path``.
+Zusätzlich abgedeckt: ein leerer Index liefert keine Treffer statt eines
+Shape-Fehlers (vorher unbehandelt).
 """
 
-import os
 import pickle
-import sys
 from pathlib import Path
 
-# Füge ai_agents zum Python-Pfad hinzu
-sys.path.append('ai_agents')
+import numpy as np
+import pytest
+import torch
 
 from ai_agents.search_engine_cli import SearchEngine
 
-def test_system_components():
-    """
-    Testet alle Komponenten des MVP-Systems.
-    """
-    print("🧪 AGENTEN_DIREKTIVE_007 - Master MVP System Test")
-    print("=" * 60)
-    
-    # Test 1: Verzeichnisstruktur
-    print("\n1. Teste Verzeichnisstruktur...")
-    required_dirs = ['raw_construction_kits', 'processed_database', 'ai_agents']
-    for dir_name in required_dirs:
-        if os.path.exists(dir_name):
-            print(f"   ✓ {dir_name} existiert")
-        else:
-            print(f"   ✗ {dir_name} fehlt")
-            return False
-    
-    # Test 2: Audio-Dateien
-    print("\n2. Teste Audio-Dateien...")
-    audio_files = list(Path('raw_construction_kits').glob('*.wav'))
-    print(f"   ✓ {len(audio_files)} Audio-Dateien gefunden")
-    if len(audio_files) == 0:
-        print("   ⚠️  Keine Audio-Dateien zum Testen")
-        return False
-    
-    # Test 3: Embeddings-Datei
-    print("\n3. Teste Embeddings-Datei...")
-    embeddings_path = 'processed_database/embeddings.pkl'
-    if os.path.exists(embeddings_path):
-        print(f"   ✓ {embeddings_path} existiert")
-        
-        # Lade und prüfe Embeddings
-        with open(embeddings_path, 'rb') as f:
-            embeddings_data = pickle.load(f)
-        print(f"   ✓ {len(embeddings_data)} Embeddings geladen")
-        
-        # Prüfe Struktur
-        if embeddings_data and 'path' in embeddings_data[0] and 'embedding' in embeddings_data[0]:
-            print("   ✓ Embedding-Struktur korrekt")
-        else:
-            print("   ✗ Embedding-Struktur fehlerhaft")
-            return False
-    else:
-        print(f"   ✗ {embeddings_path} fehlt")
-        return False
-    
-    # Test 4: Suchmaschine
-    print("\n4. Teste Suchmaschine...")
-    try:
-        search_engine = SearchEngine(embeddings_path)
-        print("   ✓ Suchmaschine erfolgreich initialisiert")
-        
-        # Test-Suchen
-        test_queries = [
-            "kick drum",
-            "bass line",
-            "melody",
-            "dark industrial sound",
-            "punchy attack"
-        ]
-        
-        print("\n5. Teste Suchanfragen...")
-        for i, query in enumerate(test_queries, 1):
-            try:
-                results = search_engine.search(query, top_k=3)
-                print(f"   ✓ Query {i}: '{query}' → {len(results)} Ergebnisse")
-                
-                # Zeige Top-Ergebnis
-                if results:
-                    top_result = results[0]
-                    file_name = os.path.basename(top_result[0])
-                    similarity = top_result[1]
-                    print(f"     → Top: {file_name} (Ähnlichkeit: {similarity:.4f})")
-                
-            except Exception as e:
-                print(f"   ✗ Query {i} fehlgeschlagen: {e}")
-                return False
-        
-        print("\n" + "=" * 60)
-        print("🎉 ALLE TESTS BESTANDEN!")
-        print("Das MVP-System ist vollständig funktionsfähig.")
-        print("\nZum Starten der interaktiven Suche:")
-        print("python ai_agents/search_engine_cli.py")
-        print("=" * 60)
-        return True
-        
-    except Exception as e:
-        print(f"   ✗ Suchmaschine-Initialisierung fehlgeschlagen: {e}")
-        return False
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
-def demonstrate_search():
-    """
-    Demonstriert die Suchfunktionalität mit verschiedenen Queries.
-    """
-    print("\n🔍 DEMO: Semantische Audio-Suche")
-    print("=" * 40)
-    
-    try:
-        search_engine = SearchEngine('processed_database/embeddings.pkl')
-        
-        demo_queries = [
-            "powerful kick drum with punch",
-            "melodic bass line",
-            "dark atmospheric sound",
-            "rhythmic loop"
-        ]
-        
-        for query in demo_queries:
-            print(f"\n🎯 Suche: '{query}'")
-            print("-" * 30)
-            
-            results = search_engine.search(query, top_k=3)
-            
-            for i, (file_path, similarity) in enumerate(results, 1):
-                file_name = os.path.basename(file_path)
-                print(f"{i}. {file_name}")
-                print(f"   Ähnlichkeit: {similarity:.4f}")
-        
-    except Exception as e:
-        print(f"Demo fehlgeschlagen: {e}")
 
-if __name__ == "__main__":
-    # Führe System-Tests durch
-    success = test_system_components()
-    
-    if success:
-        # Führe Demo durch
-        demonstrate_search()
-    else:
-        print("\n❌ System-Tests fehlgeschlagen!")
-        print("Bitte überprüfen Sie die Implementierung.")
-        sys.exit(1)
+def _write_index(index_path: Path, paths: list, embeddings: np.ndarray) -> Path:
+    """Schreibt einen Embedding-Index im Format des Suchsystems."""
+    payload = [
+        {"path": str(path), "embedding": embedding}
+        for path, embedding in zip(paths, embeddings)
+    ]
+    index_path.parent.mkdir(parents=True, exist_ok=True)
+    index_path.write_bytes(pickle.dumps(payload))
+    return index_path
+
+
+@pytest.fixture
+def embeddings_index(tmp_path: Path):
+    """Temporärer Index mit 6 Stems à 512 Dimensionen."""
+    rng = np.random.default_rng(1234)
+    stems_dir = tmp_path / "stems"
+    stems_dir.mkdir(parents=True, exist_ok=True)
+
+    paths = []
+    for index in range(6):
+        stem = stems_dir / f"stem_{index:02d}.wav"
+        stem.write_bytes(b"RIFF....WAVEfmt ")
+        paths.append(stem)
+
+    embeddings = rng.normal(size=(len(paths), 512)).astype(np.float32)
+    index_path = _write_index(tmp_path / "embeddings.pkl", paths, embeddings)
+
+    return {"index_path": index_path, "paths": [str(p) for p in paths], "dir": tmp_path}
+
+
+def test_engine_loads_every_embedding(embeddings_index):
+    """Der Index wird vollständig geladen — Anzahl und Form sind prüfbar."""
+    engine = SearchEngine(str(embeddings_index["index_path"]))
+
+    assert engine.file_paths == embeddings_index["paths"]
+    assert engine.embedding_tensors.shape == (len(embeddings_index["paths"]), 512)
+    assert engine.embedding_tensors.dtype == torch.float32
+
+
+def test_search_respects_top_k_and_returns_scores(embeddings_index):
+    """``search`` liefert höchstens ``top_k`` Treffer mit absteigender Ähnlichkeit."""
+    engine = SearchEngine(str(embeddings_index["index_path"]))
+
+    results = engine.search("kick drum", top_k=3)
+
+    assert len(results) == 3
+    for entry in results:
+        assert isinstance(entry, tuple) and len(entry) == 2
+        path, score = entry
+        assert path in embeddings_index["paths"]
+        assert isinstance(score, float)
+
+    scores = [score for _, score in results]
+    assert scores == sorted(scores, reverse=True), f"Treffer nicht sortiert: {scores}"
+
+
+def test_search_with_top_k_beyond_index_returns_all(embeddings_index):
+    """Ein zu großes ``top_k`` ist kein Fehler, sondern liefert alle Treffer."""
+    engine = SearchEngine(str(embeddings_index["index_path"]))
+
+    results = engine.search("dark industrial atmosphere", top_k=99)
+
+    assert len(results) == len(embeddings_index["paths"])
+    assert {path for path, _ in results} == set(embeddings_index["paths"])
+
+
+def test_search_does_not_write_anything(tmp_path: Path, embeddings_index):
+    """Die Suche ist rein lesend — kein neuer Dateiname neben dem Index."""
+    engine = SearchEngine(str(embeddings_index["index_path"]))
+    before = sorted(p.name for p in embeddings_index["dir"].rglob("*"))
+
+    engine.search("punchy attack", top_k=2)
+    engine.search("hypnotic arpeggio", top_k=1)
+
+    after = sorted(p.name for p in embeddings_index["dir"].rglob("*"))
+    assert after == before
+
+
+def test_empty_index_returns_no_results(tmp_path: Path):
+    """Ein leerer Index führt zu ``[]`` — nicht zu einem RuntimeError."""
+    index_path = _write_index(tmp_path / "empty.pkl", [], np.zeros((0, 512)))
+
+    engine = SearchEngine(str(index_path))
+
+    assert engine.file_paths == []
+    assert engine.search("anything", top_k=3) == []
+
+
+def test_missing_index_raises_instead_of_silently_succeeding(tmp_path: Path):
+    """Ein fehlender Index ist ein Fehler — kein stilles Grün."""
+    with pytest.raises(FileNotFoundError):
+        SearchEngine(str(tmp_path / "does-not-exist.pkl"))
+
+
+def test_production_index_is_not_used(embeddings_index):
+    """Der Test benutzt den temporären Index, nicht ``processed_database/``."""
+    engine = SearchEngine(str(embeddings_index["index_path"]))
+
+    assert all(
+        REPO_ROOT not in Path(path).parents for path in engine.file_paths
+    ), engine.file_paths
+    assert str(embeddings_index["index_path"]).startswith(str(embeddings_index["dir"]))

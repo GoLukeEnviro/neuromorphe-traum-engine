@@ -55,6 +55,8 @@ class TestSettings:
         assert settings.DATABASE_URL == "sqlite:///processed_database/stems.db"
         assert settings.UPLOAD_DIR == "./raw_construction_kits"
         assert settings.MODEL_CACHE_DIR == "./models"
+        assert settings.LOGS_DIR == "./logs"
+        assert settings.GENERATED_STEMS_DIR == "./generated_stems"
         assert settings.CLAP_MODEL_NAME == "laion/larger_clap_music_and_speech"
         assert settings.LOG_LEVEL == "INFO"
         assert "http://localhost:8501" in settings.CORS_ORIGINS
@@ -119,11 +121,25 @@ LOG_LEVEL="ERROR"
 
     @pytest.mark.unit
     def test_get_logs_path(self):
-        """Test: get_logs_path Methode"""
-        settings = Settings(_env_file=None)
+        """Test: get_logs_path Methode (Default ohne Umgebungsübersteuerung)"""
+        with patch.dict(os.environ, {}, clear=True):
+            settings = Settings(_env_file=None)
+
         logs_path = settings.get_logs_path()
-        assert logs_path == Path("./logs")
         assert isinstance(logs_path, Path)
+        assert logs_path == Path("./logs")
+        assert logs_path == Path(settings.LOGS_DIR)
+
+    @pytest.mark.unit
+    def test_get_logs_path_honours_injection(self, tmp_path: Path):
+        """Test: get_logs_path respektiert eine injizierte LOGS_DIR"""
+        target = tmp_path / "custom_logs"
+        settings = Settings(_env_file=None, LOGS_DIR=str(target))
+
+        assert settings.get_logs_path() == target
+
+        with patch.dict(os.environ, {"LOGS_DIR": str(target)}, clear=True):
+            assert Settings(_env_file=None).get_logs_path() == target
 
     @pytest.mark.unit
     def test_settings_priority(self, temp_dir: Path):

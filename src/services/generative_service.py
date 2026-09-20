@@ -37,10 +37,13 @@ class GenerativeService:
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.executor = ThreadPoolExecutor(max_workers=2)
         
-        # Verzeichnisse
-        self.models_dir = Path("models")
-        self.generated_stems_dir = Path("generated_stems")
-        self.generated_stems_dir.mkdir(exist_ok=True)
+        # Verzeichnisse (injizierbar ueber MODEL_CACHE_DIR/GENERATED_STEMS_DIR;
+        # Defaults unveraendert)
+        self.models_dir = Path(settings.MODEL_CACHE_DIR or "models")
+        self.generated_stems_dir = Path(
+            getattr(settings, "GENERATED_STEMS_DIR", None) or "generated_stems"
+        )
+        self.generated_stems_dir.mkdir(parents=True, exist_ok=True)
         
         # Cache für geladene Modelle
         self._model_cache = {}

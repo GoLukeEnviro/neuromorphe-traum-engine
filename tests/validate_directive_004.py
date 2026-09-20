@@ -7,17 +7,42 @@ Validierungsskript für AGENTEN_DIREKTIVE_004
 import sqlite3
 import json
 import os
+import sys
 from pathlib import Path
+from typing import Optional
 
-def validate_directive_004():
+def resolve_db_path(db_path: Optional[str] = None) -> str:
+    """DB-Pfad auflösen: Argument > ``NEUROMORPHE_DB_PATH`` > Produktions-Default."""
+    return db_path or os.environ.get("NEUROMORPHE_DB_PATH") or "processed_database/stems.db"
+
+def validate_directive_004(
+    db_path: Optional[str] = None,
+    input_dir: Optional[str] = None,
+):
     """
     Validiert alle Erfolgskriterien von AGENTEN_DIREKTIVE_004
+
+    Args:
+        db_path: Pfad zur SQLite-Datenbank. Default: ``NEUROMORPHE_DB_PATH``
+            oder ``processed_database/stems.db``.
+        input_dir: Verzeichnis der Test-Audiodateien. Default:
+            ``NEUROMORPHE_INPUT_DIR`` oder ``raw_construction_kits``.
+
+    Returns:
+        bool: True, wenn alle Erfolgskriterien erfüllt sind.
     """
     print("=== VALIDIERUNG AGENTEN_DIREKTIVE_004 ===")
     print()
     
-    # Datenbankverbindung
-    db_path = "processed_database/stems.db"
+    # Datenbankverbindung (Pfad injizierbar)
+    db_path = resolve_db_path(db_path)
+    input_dir = (
+        input_dir
+        or os.environ.get("NEUROMORPHE_INPUT_DIR")
+        or "raw_construction_kits"
+    )
+    print(f"📂 Datenbank: {db_path}")
+    print(f"📂 Eingabeverzeichnis: {input_dir}")
     if not os.path.exists(db_path):
         print("❌ Datenbank nicht gefunden!")
         return False
@@ -36,7 +61,7 @@ def validate_directive_004():
         ]
         
         for test_file in test_files:
-            file_path = f"raw_construction_kits/{test_file}"
+            file_path = os.path.join(input_dir, test_file)
             if os.path.exists(file_path):
                 print(f"   ✅ {test_file} erstellt")
             else:
@@ -153,7 +178,7 @@ def validate_directive_004():
         
         # Zähle erfolgreiche Implementierungen
         success_criteria = [
-            all(os.path.exists(f"raw_construction_kits/{f}") for f in test_files),  # Test-Dateien erstellt
+            all(os.path.exists(os.path.join(input_dir, f)) for f in test_files),  # Test-Dateien erstellt
             total_count >= 12,  # Mindestens 12 Einträge (6 alte + 3 neue + evtl. mehr)
             silent_count == 0,  # Stille Datei quarantäniert
             kick_result and kick_result[0] == "kick",  # Kick korrekt kategorisiert
@@ -187,4 +212,5 @@ def validate_directive_004():
         conn.close()
 
 if __name__ == "__main__":
-    validate_directive_004()
+    # Echter Exit-Code: ein nicht erfülltes Kriterium darf nicht als Erfolg enden.
+    sys.exit(0 if validate_directive_004() else 1)
