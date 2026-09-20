@@ -1,202 +1,187 @@
-#!/usr/bin/env python3
-"""
-Test script for the Neuromorphic Dream Engine
-Tests the complete workflow: separation -> training -> generation -> track creation
+"""End-to-End-Tests der Neuromorphen Traum-Engine (Service- und API-Ebene).
+
+Ausgangslage (Defekt): ``test_neuromorphic_engine`` und ``test_api_endpoints``
+waren reine Statusdrucker. Jeder Fehler endete in ``print(...)`` plus
+``return``; der Test war damit immer grün („stilles Grün“). Im Lauf vor dieser
+Änderung kehrte ``test_neuromorphic_engine`` bereits beim ersten
+``return`` zurück, ohne eine einzige Zusicherung zu prüfen.
+``test_api_endpoints`` verlangte zusätzlich einen laufenden Server auf Port
+8000 und schluckte alle Ausnahmen.
+
+Jetzt: echte Assertions gegen die Sandbox (Datenbank, Modelle, Ausgabepfade);
+der API-Teil läuft gegen den ``TestClient`` — kein Live-Server, keine
+Netzabhängigkeit.
 """
 
 import asyncio
-import os
-import sys
 from pathlib import Path
 
+import pytest
+
+from core.config import settings
+from database.database import get_database_manager
+from database.service import DatabaseService
+from schemas.stem import StemCreate
+from services.generative_service import GenerativeService
+from services.separation_service import SeparationService
+from services.training_service import TrainingService
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
-from src.services.separation_service import SeparationService
-from src.services.training_service import TrainingService
-from src.services.generative_service import GenerativeService
-from src.database.service import DatabaseService
+def _assert_inside_sandbox(path: Path, sandbox_root: Path, label: str) -> None:
+    resolved = Path(path).resolve()
+    assert sandbox_root.resolve() in resolved.parents or resolved == sandbox_root.resolve(), (
+        f"{label} zeigt nicht in die Sandbox: {resolved}"
+    )
+    assert REPO_ROOT not in resolved.parents, f"{label} zeigt in die Produktion: {resolved}"
 
 
-async def test_neuromorphic_engine():
-    """
-    Complete test of the Neuromorphic Dream Engine workflow
-    """
-    print("🧠 Starting Neuromorphic Dream Engine Test...")
-    
-    # Initialize services
-    db_service = DatabaseService()
-    separation_service = SeparationService()
-    training_service = TrainingService()
-    generative_service = GenerativeService()
-    
+# ----------------------------------------------------------------------
+# Datenbank
+# ----------------------------------------------------------------------
+def test_database_manager_is_bound_to_sandbox(sandbox_root: Path):
+    """Der globale Datenbank-Manager zeigt auf die Sandbox, nicht auf Produktion."""
+    manager = get_database_manager()
+
+    _assert_inside_sandbox(
+        Path(manager.database_url.replace("sqlite:///", "")), sandbox_root, "DATABASE_URL"
+    )
+    assert Path(manager.database_url.replace("sqlite:///", "")).resolve() != (
+        REPO_ROOT / "processed_database" / "stems.db"
+    ).resolve()
+
+
+def test_database_service_reads_are_bound_to_sandbox(sandbox_root: Path):
+    """Lesezugriffe des DatabaseService laufen gegen die Sandbox-Datenbank."""
+    service = DatabaseService()
+
+    async def scenario():
+        stats = await service.get_stem_statistics()
+        assert isinstance(stats, dict)
+        assert {"total_stems", "processed_stems", "category_distribution"} <= set(stats)
+        assert isinstance(stats["total_stems"], int)
+        assert stats["total_stems"] >= 0
+
+        categories = await service.get_stem_categories()
+        assert isinstance(categories, list)
+
+        count = await service.get_stem_count()
+        assert isinstance(count, int)
+        assert count >= 0
+
+        service.cleanup()
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.xfail(
+    raises=TypeError,
+    strict=True,
+    reason=(
+        "Bekannter Schema-Drift: StemCreate enthält 'title'/'key', das ORM-Modell "
+        "Stem nicht (dort 'musical_key'). StemCRUD.create_stem reicht die Felder "
+        "ungefiltert an Stem(**...) weiter — insert_stem ist dadurch funktionsunfähig. "
+        "Nicht Teil dieses Auftrags (Test-Isolation), aber hier sichtbar statt still grün."
+    ),
+)
+def test_database_service_insert_stem_is_blocked_by_schema_drift():
+    """Dokumentiert den Defekt: ``insert_stem`` scheitert an unbekannten Feldern."""
+    service = DatabaseService()
+
+    async def scenario():
+        created = await service.insert_stem(
+            StemCreate(filename="test_kick_engine.wav", category="kick")
+        )
+        assert created is not None
+
     try:
-        # Test 1: Database initialization
-        print("\n📊 Testing database initialization...")
-        stats = await db_service.get_stem_statistics()
-        print(f"Current stems in database: {stats['total_stems']}")
-        
-        # Test 2: Check if we have any stereo tracks for analysis
-        stereo_tracks_dir = Path("stereo_tracks_for_analysis")
-        if not stereo_tracks_dir.exists():
-            print(f"⚠️  Directory {stereo_tracks_dir} does not exist")
-            return
-        
-        audio_files = list(stereo_tracks_dir.glob("*.wav")) + list(stereo_tracks_dir.glob("*.mp3"))
-        if not audio_files:
-            print("⚠️  No audio files found in stereo_tracks_for_analysis/")
-            print("   Please add some .wav or .mp3 files to test separation")
-            return
-        
-        # Test 3: Audio separation
-        print(f"\n🎵 Testing audio separation with {len(audio_files)} files...")
-        test_file = audio_files[0]
-        print(f"Separating: {test_file.name}")
-        
-        try:
-            separated_stems = await separation_service.separate_track_async(str(test_file))
-            print(f"✅ Separation successful! Generated {len(separated_stems)} stems")
-            for stem_type, stem_path in separated_stems.items():
-                print(f"   - {stem_type}: {Path(stem_path).name}")
-        except Exception as e:
-            print(f"❌ Separation failed: {e}")
-            return
-        
-        # Test 4: Check available categories for training
-        print("\n🎯 Checking available categories for training...")
-        categories = await db_service.get_stem_categories()
-        if not categories:
-            print("⚠️  No categories found in database")
-            print("   You may need to process some stems first")
-            return
-        
-        print(f"Available categories: {categories}")
-        
-        # Test 5: VAE Training (on first available category)
-        test_category = categories[0]
-        print(f"\n🧠 Testing VAE training for category: {test_category}")
-        
-        try:
-            model_path = await training_service.train_vae_async(test_category)
-            if model_path:
-                print(f"✅ Training successful! Model saved to: {model_path}")
-            else:
-                print("❌ Training failed or insufficient data")
-                return
-        except Exception as e:
-            print(f"❌ Training failed: {e}")
-            return
-        
-        # Test 6: Generative stem creation
-        print(f"\n✨ Testing generative stem creation for category: {test_category}")
-        
-        try:
-            generated_stems = await generative_service.generate_stems_async(
-                category=test_category,
-                num_variations=3,
-                mode="random"
-            )
-            if generated_stems:
-                print(f"✅ Generation successful! Created {len(generated_stems)} new stems")
-                for stem_path in generated_stems:
-                    print(f"   - {Path(stem_path).name}")
-            else:
-                print("❌ Generation failed")
-                return
-        except Exception as e:
-            print(f"❌ Generation failed: {e}")
-            return
-        
-        # Test 7: Final statistics
-        print("\n📈 Final statistics:")
-        final_stats = await db_service.get_stem_statistics()
-        print(f"Total stems: {final_stats['total_stems']}")
-        for source_stat in final_stats['by_source']:
-            print(f"   - {source_stat['source']}: {source_stat['count']} stems")
-        
-        print("\n🎉 Neuromorphic Dream Engine test completed successfully!")
-        print("\n🚀 The system is ready for:")
-        print("   - Audio separation with Demucs")
-        print("   - VAE training on stem categories")
-        print("   - Generative stem creation")
-        print("   - Complete track generation workflow")
-        
-    except Exception as e:
-        print(f"❌ Test failed with error: {e}")
-        import traceback
-        traceback.print_exc()
-    
+        asyncio.run(scenario())
     finally:
-        # Cleanup
-        db_service.cleanup()
-        separation_service.cleanup()
+        service.cleanup()
 
 
-async def test_api_endpoints():
-    """
-    Test the API endpoints (requires server to be running)
-    """
-    print("\n🌐 Testing API endpoints...")
-    
-    try:
-        import httpx
-        
-        base_url = "http://localhost:8000"
-        
-        async with httpx.AsyncClient() as client:
-            # Test health endpoint
-            response = await client.get(f"{base_url}/health")
-            if response.status_code == 200:
-                print("✅ Health endpoint working")
-            else:
-                print(f"❌ Health endpoint failed: {response.status_code}")
-                return
-            
-            # Test stems endpoint
-            response = await client.get(f"{base_url}/api/v1/stems/")
-            if response.status_code == 200:
-                stems_data = response.json()
-                print(f"✅ Stems endpoint working - found {len(stems_data.get('stems', []))} stems")
-            else:
-                print(f"❌ Stems endpoint failed: {response.status_code}")
-            
-            # Test neuromorphic endpoints
-            endpoints_to_test = [
-                "/api/v1/neuromorphic/preprocess",
-                "/api/v1/neuromorphic/train", 
-                "/api/v1/neuromorphic/generate"
-            ]
-            
-            for endpoint in endpoints_to_test:
-                try:
-                    # Just check if endpoint exists (POST without data will return 422)
-                    response = await client.post(f"{base_url}{endpoint}")
-                    if response.status_code in [422, 400]:  # Expected for missing data
-                        print(f"✅ {endpoint} endpoint available")
-                    else:
-                        print(f"⚠️  {endpoint} returned unexpected status: {response.status_code}")
-                except Exception as e:
-                    print(f"❌ {endpoint} failed: {e}")
-    
-    except ImportError:
-        print("⚠️  httpx not available - skipping API tests")
-        print("   Install with: pip install httpx")
-    except Exception as e:
-        print(f"❌ API test failed: {e}")
+# ----------------------------------------------------------------------
+# Services
+# ----------------------------------------------------------------------
+def test_separation_service_reports_formats_and_rejects_missing_file(tmp_path: Path):
+    """Fehlende Eingaben scheitern sofort — und laden kein Demucs-Modell."""
+    service = SeparationService()
+
+    formats = service.get_supported_formats()
+    assert formats, "Es werden keine unterstützten Formate gemeldet"
+    assert all(isinstance(item, str) for item in formats)
+
+    with pytest.raises(FileNotFoundError):
+        asyncio.run(service.separate_track(str(tmp_path / "gibt-es-nicht.wav")))
+
+    assert service.model is None, (
+        "Das Demucs-Modell darf vor der Existenzprüfung nicht geladen werden"
+    )
+    service.cleanup()
 
 
-if __name__ == "__main__":
-    print("🧠 Neuromorphic Dream Engine - Complete System Test")
-    print("=" * 60)
-    
-    # Run core engine tests
-    asyncio.run(test_neuromorphic_engine())
-    
-    # Ask user if they want to test API endpoints
-    print("\n" + "=" * 60)
-    test_api = input("\n🌐 Test API endpoints? (requires server running) [y/N]: ")
-    if test_api.lower() in ['y', 'yes']:
-        print("\n📡 Make sure the server is running with: python src/main.py")
-        input("Press Enter when ready...")
-        asyncio.run(test_api_endpoints())
-    
-    print("\n✨ Test completed!")
+def test_training_service_uses_sandbox_model_dir(sandbox_root: Path):
+    """Modelle landen im injizierten Modellverzeichnis, nicht in ``./models``."""
+    service = TrainingService()
+
+    _assert_inside_sandbox(service.models_dir, sandbox_root, "models_dir")
+    _assert_inside_sandbox(Path(settings.MODEL_CACHE_DIR), sandbox_root, "MODEL_CACHE_DIR")
+    assert service.models_dir.is_dir()
+    assert service.get_available_models() == []
+
+
+def test_generative_service_uses_sandbox_output_dirs(sandbox_root: Path):
+    """Generierte Stems landen im injizierten Ausgabeverzeichnis."""
+    service = GenerativeService()
+
+    _assert_inside_sandbox(service.models_dir, sandbox_root, "models_dir")
+    _assert_inside_sandbox(service.generated_stems_dir, sandbox_root, "generated_stems_dir")
+    assert service.generated_stems_dir.is_dir()
+    assert service.get_generated_stems_info() == []
+
+
+# ----------------------------------------------------------------------
+# API (TestClient statt Live-Server)
+# ----------------------------------------------------------------------
+def test_api_health_endpoint(test_client):
+    """Der Health-Endpunkt antwortet mit 200 und einem Statusfeld."""
+    response = test_client.get("/health")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert isinstance(payload, dict)
+    assert payload, "Health-Antwort ist leer"
+
+
+def test_api_stems_endpoint_lists_stems(test_client):
+    """``/api/v1/stems/`` liefert eine Liste — gegen die Test-Datenbank."""
+    response = test_client.get("/api/v1/stems/")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert isinstance(payload, (dict, list))
+
+
+def test_api_documented_post_endpoints_exist(test_client):
+    """Die dokumentierten POST-Endpunkte existieren (422/400 statt 404)."""
+    endpoints = [
+        "/api/v1/neuromorphic/preprocess",
+        "/api/v1/neuromorphic/train",
+        "/api/v1/neuromorphic/generate",
+    ]
+
+    for endpoint in endpoints:
+        response = test_client.post(endpoint)
+        assert response.status_code != 404, f"{endpoint} existiert nicht"
+        assert response.status_code in (400, 422, 405), (
+            f"{endpoint} antwortet unerwartet: {response.status_code}"
+        )
+
+
+def test_api_arrangements_endpoint_works(test_client):
+    """Arrangements lassen sich auflisten (leere Liste ist gültig)."""
+    response = test_client.get("/api/v1/arrangements?page=1&per_page=10")
+
+    assert response.status_code == 200
+    assert isinstance(response.json(), (dict, list))

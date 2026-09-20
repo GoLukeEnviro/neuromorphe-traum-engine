@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     LOG_FILE_MAX_SIZE_MB: int = 5
     LOG_FILE_BACKUP_COUNT: int = 3
     LOG_LEVEL: str = "INFO"
+    LOGS_DIR: str = "./logs"
     PERFORMANCE_TRACKING: bool = False
     
     # Database
@@ -35,6 +36,7 @@ class Settings(BaseSettings):
     PROCESSED_STEMS_DIR: str = "./processed_database/stems"
     EMBEDDINGS_DIR: str = "./dataembeddings"
     RENDERED_TRACKS_DIR: str = "./rendered_tracks"
+    GENERATED_STEMS_DIR: str = "./generated_stems"
     STEREO_TRACKS_DIR: str = "./stereo_tracks_for_analysis"
     MAX_FILE_SIZE: int = 100 * 1024 * 1024  # 100MB
 
@@ -76,8 +78,8 @@ class Settings(BaseSettings):
         return value
 
     def get_logs_path(self) -> Path:
-        """Gibt den Pfad zum Log-Verzeichnis zurück."""
-        return Path("./logs")
+        """Gibt den Pfad zum Log-Verzeichnis zurück (injizierbar via LOGS_DIR)."""
+        return Path(self.LOGS_DIR)
     
     model_config = ConfigDict(env_file=".env", extra="allow")
 

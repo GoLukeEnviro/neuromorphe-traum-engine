@@ -94,6 +94,10 @@ class SearchEngine:
         Returns:
             list: Liste der Top-K Dateipfade
         """
+        # Leerer Index: keine Ergebnisse statt Shape-Fehler
+        if not self.file_paths:
+            return []
+
         # Berechne Text-Embedding für den Prompt
         text_embedding = self.clap_model.get_text_embedding(
             [prompt], use_tensor=True)
