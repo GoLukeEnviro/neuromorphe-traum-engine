@@ -1,0 +1,48 @@
+name: Heavy integration (manuell)
+
+# Nur manuell startbar (Actions -> "Heavy integration (manuell)" -> Run workflow).
+# Lädt echte Modelle (CLAP-Download) und ist deshalb bewusst KEIN Teil des
+# PR-Gates (.github/workflows/ci.yml).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    name: tests (slow/clap, echte Modelle)
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: System-Abhängigkeiten
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libportaudio2 ffmpeg
+
+      - name: Platz für die Abhängigkeiten und Modell-Downloads schaffen
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Abhängigkeiten installieren
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      # test_services/test_neuro_analyzer.py::test_real_clap_model_integration
+      # (Marker slow + clap). Der Test überspringt sich derzeit noch selbst
+      # (pytest.skip("Echter CLAP-Test - nur bei Bedarf ausführen")) — dieser
+      # Workflow ist der Aufhänger, sobald er aktiviert wird.
+      - name: Tests mit echten Modellen
+        env:
+          USE_REAL_CLAP: "1"
+        run: python -m pytest tests -q -m "slow or clap"
