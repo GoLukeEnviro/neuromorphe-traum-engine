@@ -8,7 +8,7 @@ import sys
 import logging
 import logging.handlers
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Callable
 from datetime import datetime
 from functools import lru_cache
 
