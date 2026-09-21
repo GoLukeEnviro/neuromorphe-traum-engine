@@ -46,6 +46,12 @@ class Settings(BaseSettings):
     # CLAP Model
     MODEL_CACHE_DIR: str = "./models"
     CLAP_MODEL_NAME: str = "laion/larger_clap_music_and_speech"
+    #: Realer Modus ist der Default: ein Modell-Lade-/Inferenzfehler oder ein
+    #: degeneriertes (Null-/nicht-endliches) Embedding darf NIE als Erfolg
+    #: durchgereicht werden. ``False`` erlaubt nur den degradierten Altpfad
+    #: (Audio bleibt nutzbar, aber ohne Embedding) - bewusst gesetzt, nie
+    #: stillschweigend.
+    EMBEDDING_FAIL_CLOSED: bool = True
     
     # API
     CORS_ORIGINS: List[str] = [

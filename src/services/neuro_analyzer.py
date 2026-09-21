@@ -31,6 +31,7 @@ from sklearn.cluster import KMeans
 
 from core.config import settings
 from database.service import DatabaseService
+from exceptions import CLAPModelError
 
 logger = logging.getLogger(__name__)
 
@@ -520,10 +521,29 @@ class NeuroAnalyzer:
     # ------------------------------------------------------------------
 
     def _normalize_embedding(self, embedding: Any) -> np.ndarray:
-        """L2-Normalisiert ein Embedding (Norm = 1)."""
+        """L2-Normalisiert ein Embedding (Norm = 1).
+
+        Im realen Modus (``settings.EMBEDDING_FAIL_CLOSED``, Default) ist ein
+        degeneriertes Ergebnis (leer, NaN/Inf oder Null-Vektor) kein Embedding:
+        es wird als :class:`CLAPModelError` fail-closed gemeldet statt still als
+        Ergebnis durchgereicht. Beim expliziten Opt-out bleibt das bisherige
+        Verhalten (Rueckgabe des Roh-Arrays) erhalten.
+        """
         array = np.asarray(embedding, dtype=np.float64).ravel()
+        if array.size == 0 or not np.all(np.isfinite(array)):
+            if getattr(settings, "EMBEDDING_FAIL_CLOSED", True):
+                raise CLAPModelError(
+                    "CLAP lieferte ein degeneriertes Embedding (leer oder NaN/Inf)",
+                    operation="inference",
+                )
+            return array
         norm = float(np.linalg.norm(array))
-        if norm <= 0.0 or not np.isfinite(norm):
+        if norm <= 0.0:
+            if getattr(settings, "EMBEDDING_FAIL_CLOSED", True):
+                raise CLAPModelError(
+                    "CLAP lieferte einen Null-Vektor statt eines Embeddings",
+                    operation="inference",
+                )
             return array
         return array / norm
 
