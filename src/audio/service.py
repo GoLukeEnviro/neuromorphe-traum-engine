@@ -1,4 +1,5 @@
 import os
+import logging
 import uuid
 import time
 import asyncio
@@ -10,6 +11,9 @@ import librosa
 import soundfile as sf
 from concurrent.futures import ThreadPoolExecutor
 
+from core.config import settings
+from exceptions import CLAPModelError
+
 from schemas import (
     AudioUploadRequest, 
     AudioProcessingResponse, 
@@ -17,6 +21,22 @@ from schemas import (
     AudioFileInfo,
     ProcessingStatus
 )
+
+logger = logging.getLogger(__name__)
+
+
+def _is_usable_embedding(embedding: Optional[np.ndarray]) -> bool:
+    """Ein Embedding zaehlt nur, wenn es endlich und nicht degeneriert ist.
+
+    Null-Vektor, NaN/Inf oder ein leeres Array sind keine Embeddings - sie
+    sehen fuer den Aufrufer sonst wie ein gueltiges Ergebnis aus.
+    """
+    if embedding is None:
+        return False
+    array = np.asarray(embedding, dtype=np.float64).ravel()
+    if array.size == 0 or not np.all(np.isfinite(array)):
+        return False
+    return float(np.linalg.norm(array)) > 0.0
 
 
 class AudioProcessingService:
@@ -27,6 +47,8 @@ class AudioProcessingService:
         self.audio_dir = Path(audio_dir)
         self._executor = ThreadPoolExecutor(max_workers=2)
         self._clap_model = None
+        # Realer Modus: Modellfehler und degenerierte Embeddings fail-closed.
+        self.fail_closed = bool(settings.EMBEDDING_FAIL_CLOSED)
         
         # Create directory if it doesn't exist
         self.audio_dir.mkdir(exist_ok=True)
@@ -36,29 +58,74 @@ class AudioProcessingService:
         try:
             from laion_clap import CLAP_Module
         except ImportError as exc:
-            raise RuntimeError("CLAP module not available") from exc
+            raise CLAPModelError(
+                "CLAP-Modul nicht verfuegbar (laion_clap fehlt)",
+                operation="import",
+            ) from exc
 
         if self._clap_model is None:
-            self._clap_model = CLAP_Module(enable_fusion=False)
-            self._clap_model.load_ckpt()
+            try:
+                self._clap_model = CLAP_Module(enable_fusion=False)
+                self._clap_model.load_ckpt()
+            except Exception as exc:
+                raise CLAPModelError(
+                    f"CLAP-Modell konnte nicht geladen werden: {exc}",
+                    operation="load",
+                ) from exc
         return self._clap_model
     
     async def _generate_clap_embedding(self, audio_path: Path) -> Optional[np.ndarray]:
-        """Generate CLAP embedding for audio file"""
+        """Generate CLAP embedding for audio file.
+
+        Raises:
+            CLAPModelError: im realen Modus, wenn das Modell nicht laedt, die
+                Inferenz fehlschlaegt oder das Ergebnis kein brauchbares
+                Embedding ist (Null-Vektor, NaN/Inf, leer).
+        """
+        model = self._clap_model
+        if model is None:
+            try:
+                model = self._load_clap_model()
+            except Exception as exc:
+                if self.fail_closed:
+                    logger.error("CLAP-Modell nicht verfuegbar fuer %s: %s", audio_path, exc)
+                    raise CLAPModelError(
+                        f"CLAP-Modell nicht verfuegbar: {exc}",
+                        operation="load",
+                    ) from exc
+                logger.warning("CLAP-Modell nicht verfuegbar fuer %s: %s", audio_path, exc)
+                return None
+
         try:
-            # Load CLAP model if not already loaded
-            if self._clap_model is None:
-                self._clap_model = self._load_clap_model()
-            
-            # Generate embedding directly from file (more reliable)
-            audio_embed = self._clap_model.get_audio_embedding_from_filelist(
+            audio_embed = model.get_audio_embedding_from_filelist(
                 x=[str(audio_path)], use_tensor=False
             )
-            
-            return audio_embed[0] if len(audio_embed) > 0 else None
-            
-        except Exception as e:
+        except CLAPModelError:
+            raise
+        except Exception as exc:
+            if self.fail_closed:
+                logger.error("CLAP-Embedding fehlgeschlagen fuer %s: %s", audio_path, exc)
+                raise CLAPModelError(
+                    f"CLAP-Embedding fehlgeschlagen: {exc}",
+                    operation="inference",
+                ) from exc
+            logger.warning("CLAP-Embedding fehlgeschlagen fuer %s: %s", audio_path, exc)
             return None
+
+        embedding = audio_embed[0] if len(audio_embed) > 0 else None
+
+        if not _is_usable_embedding(embedding):
+            if self.fail_closed:
+                logger.error("CLAP lieferte kein brauchbares Embedding fuer %s", audio_path)
+                raise CLAPModelError(
+                    "CLAP lieferte ein degeneriertes Embedding (Null-Vektor oder NaN)",
+                    operation="inference",
+                    details={"audio_path": str(audio_path)},
+                )
+            logger.warning("CLAP lieferte kein brauchbares Embedding fuer %s", audio_path)
+            return None
+
+        return embedding
     
     async def save_uploaded_file(self, 
                                 file_content: bytes, 
@@ -142,6 +209,15 @@ class AudioProcessingService:
                 np.save(embedding_path, embedding)
                 
                 message = f"Audio processed successfully in {processing_time:.2f}s with CLAP embedding ({embedding.shape[0]} dimensions)"
+            elif self.fail_closed:
+                # Fail-closed: kein Ergebnis ist ein Fehler, kein Erfolg.
+                return AudioProcessingResponse(
+                    id=file_id,
+                    filename=file_path.name,
+                    status=ProcessingStatus.FAILED,
+                    message="CLAP embedding failed (fail-closed mode)",
+                    created_at=datetime.now()
+                )
             else:
                 message = f"Audio uploaded in {processing_time:.2f}s (CLAP embedding failed)"
             
@@ -153,6 +229,15 @@ class AudioProcessingService:
                 created_at=datetime.now()
             )
             
+        except CLAPModelError as e:
+            logger.error(f"CLAP-Embedding nicht moeglich fuer {file_id}: {e}")
+            return AudioProcessingResponse(
+                id=file_id,
+                filename=file_id,
+                status=ProcessingStatus.FAILED,
+                message=f"CLAP embedding failed: {e}",
+                created_at=datetime.now()
+            )
         except Exception as e:
             return AudioProcessingResponse(
                 id=file_id,
