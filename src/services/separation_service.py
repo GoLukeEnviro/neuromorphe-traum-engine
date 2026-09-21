@@ -13,8 +13,9 @@ import logging
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 
+import numpy as np
+import soundfile as sf
 import torch
-import torchaudio
 from demucs.pretrained import get_model
 from demucs.apply import apply_model
 from demucs.audio import save_audio
@@ -58,6 +59,28 @@ class SeparationService:
                 logger.error(f"Fehler beim Laden des Demucs-Modells: {e}")
                 raise
     
+    def _load_waveform(self, audio_path: str) -> Tuple[torch.Tensor, int]:
+        """Dekodiert Audio über ``soundfile`` statt ``torchaudio.load``.
+
+        torchaudio 2.11 leitet ``load()`` auf ``torchcodec`` um, das hier keine
+        Abhängigkeit ist (Issue #8) — jeder Separationslauf brach schon beim
+        Einlesen ab. ``soundfile`` ist ohnehin Projektabhängigkeit und schreibt
+        auch die Demucs-Ausgabe (``demucs.audio.encode_wav``) selbst.
+
+        Returns:
+            ``(waveform, sample_rate)`` mit ``waveform`` als float32-Tensor der
+            Form ``(channels, samples)``; Mono wird auf zwei Kanäle dupliziert
+            und mehr als zwei Kanäle werden auf die ersten zwei gekürzt, weil
+            ``htdemucs`` Stereo erwartet.
+        """
+        data, sample_rate = sf.read(audio_path, dtype="float32", always_2d=True)
+        waveform = torch.from_numpy(np.ascontiguousarray(data.T))
+        if waveform.shape[0] == 1:
+            waveform = waveform.repeat(2, 1)
+        elif waveform.shape[0] > 2:
+            waveform = waveform[:2]
+        return waveform, int(sample_rate)
+
     def _separate_audio_sync(self, audio_path: str, output_dir: str) -> Dict[str, str]:
         """
         Synchrone Audio-Separation (läuft in ThreadPoolExecutor)
@@ -75,7 +98,7 @@ class SeparationService:
             
             # Audio laden
             logger.info(f"Lade Audio-Datei: {audio_path}")
-            waveform, sample_rate = torchaudio.load(audio_path)
+            waveform, sample_rate = self._load_waveform(audio_path)
             
             # Auf GPU verschieben falls verfügbar
             waveform = waveform.to(self.device)
