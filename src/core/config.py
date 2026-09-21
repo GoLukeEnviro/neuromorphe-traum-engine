@@ -7,7 +7,7 @@ CLAP-Modell und API-Zugriff.
 
 from pydantic_settings import BaseSettings
 from pydantic import field_validator, ConfigDict
-from typing import List
+from typing import Dict, List
 import os
 from pathlib import Path
 
@@ -58,6 +58,53 @@ class Settings(BaseSettings):
         "http://localhost:8501",
         "http://localhost:3000",
     ]
+    #: Betriebsmodus der API. ``local`` (Default) ist der bisherige, lokale
+    #: Betrieb ohne Token. ``shared`` verlangt für jede sensible Route einen
+    #: konfigurierten Client-Token (Header ``X-API-Token``).
+    OPERATION_MODE: str = "local"
+    #: Client-Tokens als ``token:owner``-Paare, kommagetrennt. Leer = keine
+    #: Clients konfiguriert; im Modus ``shared`` antwortet der Dienst dann
+    #: fail-closed (503) statt still offen weiterzulaufen.
+    #: Bewusst ein String: pydantic-settings würde ein Dict-Feld als JSON
+    #: parsen und an einer einfachen ``token:owner``-Liste scheitern.
+    API_CLIENT_TOKENS: str = ""
+
+    @field_validator("CORS_ORIGINS")
+    @classmethod
+    def reject_wildcard_origin(cls, value: List[str]) -> List[str]:
+        """Ein Wildcard-Origin ist keine Freigabe, sondern ein Loch."""
+        if any(origin.strip() == "*" for origin in value):
+            raise ValueError("CORS_ORIGINS must not contain '*'")
+        return value
+
+    @field_validator("OPERATION_MODE")
+    @classmethod
+    def validate_operation_mode(cls, value: str) -> str:
+        """Nur die beiden bekannten Betriebsmodi sind zulässig."""
+        normalized = value.strip().lower()
+        if normalized not in {"local", "shared"}:
+            raise ValueError(f"Unsupported operation mode: {value}")
+        return normalized
+
+    @property
+    def client_tokens(self) -> Dict[str, str]:
+        """Client-Tokens als ``{token: owner}``-Abbildung."""
+        tokens: Dict[str, str] = {}
+        for entry in self.API_CLIENT_TOKENS.split(","):
+            entry = entry.strip()
+            if not entry:
+                continue
+            token, _, owner = entry.partition(":")
+            token = token.strip()
+            owner = owner.strip()
+            if token and owner:
+                tokens[token] = owner
+        return tokens
+
+    @property
+    def cors_origins(self) -> List[str]:
+        """Freigegebene Origins (ohne Leereinträge, ohne Wildcard)."""
+        return [origin.strip() for origin in self.CORS_ORIGINS if origin.strip()]
 
     @field_validator("CORS_ORIGINS", mode="before")
     def split_cors_origins(cls, v):

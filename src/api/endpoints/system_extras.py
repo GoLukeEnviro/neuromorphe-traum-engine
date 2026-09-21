@@ -46,6 +46,8 @@ from pydantic import BaseModel, Field
 from pathlib import Path
 
 from database.database import get_database_manager
+from core.config import settings
+from core.security import ClientIdentity, assert_owner, require_client
 from services.arranger import ArrangerService
 from services.neuro_analyzer import NeuroAnalyzer
 from services.preprocessor import PreprocessorService
@@ -199,8 +201,13 @@ async def create_arrangement(
     request: ArrangementCreateRequest,
     arranger: ArrangerService = Depends(get_arranger_service),
     db_manager=Depends(get_db_manager),
+    identity: ClientIdentity = Depends(require_client),
 ) -> Dict[str, Any]:
-    """Erstellt ein Arrangement aus einem Text-Prompt."""
+    """Erstellt ein Arrangement aus einem Text-Prompt.
+
+    Das Arrangement wird dem aufrufenden Client-Owner zugeordnet (im lokalen
+    Modus ``local``); die Zuordnung wandert in die gespeicherten Metadaten.
+    """
     try:
         result = await arranger.create_arrangement(
             prompt=request.prompt, duration=request.duration
@@ -217,6 +224,7 @@ async def create_arrangement(
     result.setdefault("metadata", {})
     if request.genre:
         result["metadata"].setdefault("genre", request.genre)
+    result["metadata"]["owner"] = identity.owner
 
     try:
         stored_id = await db_manager.create_arrangement(
@@ -241,20 +249,37 @@ async def list_arrangements(
     page: int = Query(1, ge=1),
     per_page: int = Query(10, ge=1, le=100),
     db_manager=Depends(get_db_manager),
+    identity: ClientIdentity = Depends(require_client),
 ) -> Dict[str, Any]:
-    """Listet Arrangements paginiert auf."""
-    return await db_manager.list_arrangements(page=page, per_page=per_page)
+    """Listet Arrangements paginiert auf (im geteilten Modus nur die eigenen)."""
+    result = await db_manager.list_arrangements(page=page, per_page=per_page)
+    if str(getattr(settings, "OPERATION_MODE", "local")).lower() != "shared":
+        return result
+
+    arrangements = result.get("arrangements") if isinstance(result, dict) else None
+    if arrangements is None:
+        return result
+    owned = [
+        item
+        for item in arrangements
+        if (item.get("metadata") or {}).get("owner") == identity.owner
+    ]
+    result["arrangements"] = owned
+    result["total"] = len(owned)
+    return result
 
 
 @router.get("/api/v1/arrangements/{arrangement_id}")
 async def get_arrangement(
     arrangement_id: str,
     db_manager=Depends(get_db_manager),
+    identity: ClientIdentity = Depends(require_client),
 ) -> Dict[str, Any]:
-    """Ruft ein Arrangement ab."""
+    """Ruft ein Arrangement ab (nur für den Owner)."""
     arrangement = await db_manager.get_arrangement(arrangement_id)
     if arrangement is None:
         raise HTTPException(status_code=404, detail="Arrangement not found")
+    assert_owner((arrangement.get("metadata") or {}).get("owner"), identity)
     return arrangement
 
 
@@ -263,15 +288,30 @@ async def update_arrangement(
     arrangement_id: str,
     request: ArrangementUpdateRequest,
     db_manager=Depends(get_db_manager),
+    identity: ClientIdentity = Depends(require_client),
 ) -> Dict[str, Any]:
-    """Aktualisiert ein Arrangement."""
+    """Aktualisiert ein Arrangement (nur für den Owner).
+
+    Der Owner-Eintrag in den Metadaten wird nach dem Update wiederhergestellt:
+    ein Client darf sich eine fremde Ressource nicht durch Überschreiben der
+    Metadaten aneignen.
+    """
+    existing = await db_manager.get_arrangement(arrangement_id)
+    owner = None
+    if existing is not None:
+        owner = (existing.get("metadata") or {}).get("owner")
+        assert_owner(owner, identity)
+
     update_data: Dict[str, Any] = {}
     if request.prompt is not None:
         update_data["prompt"] = request.prompt
     if request.structure is not None:
         update_data["track_structure"] = request.structure
     if request.metadata is not None:
-        update_data["arrangement_metadata"] = request.metadata
+        metadata = dict(request.metadata)
+        if owner is not None:
+            metadata["owner"] = owner
+        update_data["arrangement_metadata"] = metadata
 
     arrangement = await db_manager.update_arrangement(arrangement_id, update_data)
     if arrangement is None:
@@ -283,8 +323,18 @@ async def update_arrangement(
 async def delete_arrangement(
     arrangement_id: str,
     db_manager=Depends(get_db_manager),
+    identity: ClientIdentity = Depends(require_client),
 ):
-    """Löscht ein Arrangement."""
+    """Löscht ein Arrangement (nur für den Owner).
+
+    Ein nicht existierender Datensatz (der Mock-Pfad der Bestandstests) wird
+    ohne Owner-Prüfung durchgereicht; die Löschoperation selbst entscheidet
+    dann über 204/404.
+    """
+    existing = await db_manager.get_arrangement(arrangement_id)
+    if existing is not None:
+        assert_owner((existing.get("metadata") or {}).get("owner"), identity)
+
     deleted = await db_manager.delete_arrangement(arrangement_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Arrangement not found")
@@ -302,8 +352,13 @@ async def render_arrangement(
     request: RenderRequest,
     renderer: RendererService = Depends(get_renderer_service),
     db_manager=Depends(get_db_manager),
+    identity: ClientIdentity = Depends(require_client),
 ) -> Dict[str, Any]:
-    """Rendert ein Arrangement zu einer Audiodatei."""
+    """Rendert ein Arrangement zu einer Audiodatei (nur für den Owner)."""
+    arrangement = await db_manager.get_arrangement(arrangement_id)
+    if arrangement is not None:
+        assert_owner((arrangement.get("metadata") or {}).get("owner"), identity)
+
     try:
         result = await renderer.render_arrangement(
             arrangement_id, format=request.format
@@ -322,9 +377,9 @@ async def render_arrangement(
                 "arrangement_id": arrangement_id,
                 "format": request.format,
                 "status": "completed",
-                "progress": 100.0,
+                "progress": 1.0,
                 "output_path": result.get("output_path"),
-                "options": request.options or {},
+                "options": {"owner": identity.owner, **(request.options or {})},
             }
         )
     except Exception:  # noqa: BLE001 - Persistenz ist optional
@@ -340,20 +395,39 @@ async def render_arrangement(
 
 
 @router.get("/api/v1/renders")
-async def list_render_jobs(db_manager=Depends(get_db_manager)) -> Dict[str, Any]:
-    """Listet Render-Jobs auf."""
-    return await db_manager.list_render_jobs()
+async def list_render_jobs(
+    db_manager=Depends(get_db_manager),
+    identity: ClientIdentity = Depends(require_client),
+) -> Dict[str, Any]:
+    """Listet Render-Jobs auf (im geteilten Modus nur die eigenen)."""
+    result = await db_manager.list_render_jobs()
+    if str(getattr(settings, "OPERATION_MODE", "local")).lower() != "shared":
+        return result
+
+    jobs = result.get("jobs") if isinstance(result, dict) else None
+    if jobs is None:
+        return result  # unerwartete Form: unverändert durchreichen
+    owned = [
+        job
+        for job in jobs
+        if (job.get("options") or {}).get("owner") == identity.owner
+    ]
+    result["jobs"] = owned
+    result["total"] = len(owned)
+    return result
 
 
 @router.get("/api/v1/renders/{render_id}")
 async def get_render_status(
     render_id: str,
     db_manager=Depends(get_db_manager),
+    identity: ClientIdentity = Depends(require_client),
 ) -> Dict[str, Any]:
-    """Ruft den Status eines Render-Jobs ab."""
+    """Ruft den Status eines Render-Jobs ab (nur für den Owner)."""
     job = await db_manager.get_render_job(render_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Render job not found")
+    assert_owner((job.get("options") or {}).get("owner"), identity)
     return job
 
 
@@ -361,11 +435,14 @@ async def get_render_status(
 async def download_render(
     render_id: str,
     db_manager=Depends(get_db_manager),
+    identity: ClientIdentity = Depends(require_client),
 ):
-    """Lädt die gerenderte Datei herunter."""
+    """Lädt die gerenderte Datei herunter (nur für den Owner)."""
     job = await db_manager.get_render_job(render_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Render job not found")
+
+    assert_owner((job.get("options") or {}).get("owner"), identity)
 
     output_path = job.get("output_path")
     if not output_path or not Path(output_path).exists():
