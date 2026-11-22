@@ -56,16 +56,24 @@ RUN mkdir -p \
     /app/data/generated_tracks \
     /app/data/database \
     /app/logs \
-    && chown -R appuser:appuser /app
+    /tmp/numba_cache \
+    && chown -R appuser:appuser /app /tmp/numba_cache
 
 # Environment Variables
 ENV PYTHONPATH=/app/src
 ENV PATH=/home/appuser/.local/bin:$PATH
 ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
+# PYTHONDONTWRITEBYTECODE darf hier NICHT gesetzt werden: numba (via librosa)
+# sucht beim ersten Aufruf einen Cache-Locator und scheitert sonst mit
+# "cannot cache function '__o_fold': no locator available".
+# Stattdessen einen beschreibbaren Cache-Pfad vorgeben.
+ENV NUMBA_CACHE_DIR=/tmp/numba_cache
 
 # Default-Konfiguration
-ENV DATABASE_URL=sqlite:///app/data/database/neuromorphe_engine.db
+# Vier Schrägstriche: ``sqlite:///`` leitet einen relativen Pfad ein, aus
+# ``/app/data/...`` würde dann ``/app/app/data/...`` und der Start scheitert
+# mit "unable to open database file".
+ENV DATABASE_URL=sqlite:////app/data/database/neuromorphe_engine.db
 ENV AUDIO_INPUT_DIR=/app/data/audio_input
 ENV AUDIO_OUTPUT_DIR=/app/data/audio_output
 ENV PROCESSED_DATABASE_DIR=/app/data/processed_database
