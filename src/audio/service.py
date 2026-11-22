@@ -47,6 +47,8 @@ class AudioProcessingService:
         self.audio_dir = Path(audio_dir)
         self._executor = ThreadPoolExecutor(max_workers=2)
         self._clap_model = None
+        # Zuordnung Upload-ID -> Original-Dateiname (Platte nutzt eine UUID).
+        self._original_names: dict = {}
         # Realer Modus: Modellfehler und degenerierte Embeddings fail-closed.
         self.fail_closed = bool(settings.EMBEDDING_FAIL_CLOSED)
         
@@ -134,6 +136,10 @@ class AudioProcessingService:
         file_id = str(uuid.uuid4())
         file_extension = Path(request.filename).suffix
         file_path = self.audio_dir / f"{file_id}{file_extension}"
+
+        # Originalnamen merken: Auf der Platte liegt eine UUID, im Katalog soll
+        # aber der Name stehen, den der Nutzer hochgeladen hat.
+        self._original_names[file_id] = Path(request.filename).name
         
         # Save file asynchronously
         loop = asyncio.get_event_loop()
@@ -180,6 +186,47 @@ class AudioProcessingService:
             print(f"Error getting audio info for {file_id}: {e}")
             return None
     
+    async def _register_stem(self, file_path: Path, embedding: np.ndarray) -> Optional[str]:
+        """Legt den hochgeladenen Stem im Katalog an.
+
+        Ohne diesen Schritt landet die Datei nur auf der Platte: Sie hat ein
+        Embedding, taucht aber in keiner Suche auf. Der Fehler wird geloggt,
+        aber nicht weitergeworfen — der Upload selbst ist bereits erfolgreich.
+        """
+        try:
+            from database.database import get_database_manager
+
+            try:
+                info = sf.info(str(file_path))
+                duration = float(info.duration)
+                sample_rate = int(info.samplerate)
+                channels = int(info.channels)
+            except Exception:
+                duration, sample_rate, channels = 0.0, 44100, 2
+
+            vector = np.asarray(embedding, dtype=np.float32).ravel()
+            display_name = self._original_names.get(
+                file_path.stem, file_path.name
+            )
+            payload = {
+                "filename": display_name,
+                "original_path": str(file_path),
+                "processed_path": str(file_path),
+                "duration": duration,
+                "sample_rate": sample_rate,
+                "channels": channels,
+                "file_size": file_path.stat().st_size,
+                "audio_embedding": vector.tolist(),
+                "processing_status": "completed",
+                "source": "upload",
+            }
+            stem_id = await get_database_manager().create_stem(payload)
+            logger.info("Stem im Katalog angelegt: %s (%s)", file_path.name, stem_id)
+            return str(stem_id)
+        except Exception as exc:
+            logger.error("Stem konnte nicht angelegt werden (%s): %s", file_path, exc)
+            return None
+
     async def process_audio_file(self, file_id: str) -> AudioProcessingResponse:
         """Process audio file and generate CLAP embedding"""
         start_time = time.time()
@@ -207,7 +254,12 @@ class AudioProcessingService:
                 # Save embedding to file for later retrieval
                 embedding_path = self.audio_dir / f"{file_id}_embedding.npy"
                 np.save(embedding_path, embedding)
-                
+
+                # Stem im Katalog anlegen — sonst ist die Datei zwar auf der
+                # Platte, aber nie durchsuchbar. Genau dieser Bruch zwischen
+                # Upload-Pfad und Stem-Katalog machte die Bibliothek leer.
+                await self._register_stem(file_path, embedding)
+
                 message = f"Audio processed successfully in {processing_time:.2f}s with CLAP embedding ({embedding.shape[0]} dimensions)"
             elif self.fail_closed:
                 # Fail-closed: kein Ergebnis ist ein Fehler, kein Erfolg.

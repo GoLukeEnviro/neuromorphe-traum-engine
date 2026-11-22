@@ -1031,15 +1031,20 @@ class DatabaseManager:
         return data
     
     async def create_arrangement(self, arrangement_data: Dict[str, Any]) -> str:
-        """Arrangement erstellen und seine ID zurückgeben."""
+        """Arrangement erstellen und seine ID zurückgeben.
+
+        Eine übergebene ``id`` wird respektiert. Sonst weicht die gespeicherte
+        ID von der ID ab, die der Aufrufer (z. B. der Arranger mit ``arr_...``)
+        zurückgibt — und jeder Folgeaufruf läuft in ein 404.
+        """
         data = dict(arrangement_data)
-        data.pop("id", None)
+        requested_id = data.pop("id", None)
         data.setdefault("prompt", "")
         data.setdefault("status", "completed")
         if "structure" in data and "track_structure" not in data:
             data["track_structure"] = data.pop("structure")
-        if isinstance(data.get("track_structure"), dict):
-            data["track_structure"] = data["track_structure"]
+        if requested_id:
+            data["id"] = str(requested_id)
         
         async with self.get_async_session() as session:
             arrangement = Arrangement(**data)

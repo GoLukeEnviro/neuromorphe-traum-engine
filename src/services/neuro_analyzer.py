@@ -210,9 +210,25 @@ class CLAPEmbedder:
             # Embedding generieren
             with torch.no_grad():
                 text_embeds = self.model.get_text_features(**inputs)
-                text_embeds = text_embeds / text_embeds.norm(dim=-1, keepdim=True)
-            
-            return text_embeds.cpu().numpy().flatten()
+
+            # Je nach transformers-Version kommt ein Tensor oder ein
+            # Model-Output (``BaseModelOutputWithPooling``) zurück. Für CLAP
+            # ist ``pooler_output`` das 512-dim Embedding.
+            if hasattr(text_embeds, "pooler_output"):
+                text_embeds = text_embeds.pooler_output
+            elif not hasattr(text_embeds, "detach") and isinstance(text_embeds, (tuple, list)):
+                text_embeds = text_embeds[0]
+
+            if hasattr(text_embeds, "detach"):
+                vector = text_embeds.detach().cpu().numpy()
+            else:
+                vector = np.asarray(text_embeds)
+
+            vector = np.asarray(vector, dtype=np.float32).ravel()
+            norm = float(np.linalg.norm(vector))
+            if norm > 0:
+                vector = vector / norm
+            return vector
             
         except Exception as e:
             logger.error(f"Fehler bei Text-Embedding: {e}")
@@ -683,9 +699,18 @@ class NeuroAnalyzer:
     # ------------------------------------------------------------------
 
     async def _compute_text_embedding(self, prompt: str) -> np.ndarray:
-        """Berechnet ein Text-Embedding über das CLAP-Modell."""
-        inputs = self.processor(text=[prompt], return_tensors="pt")
-        raw_embedding = self.model.get_text_embedding(**inputs)
+        """Berechnet ein Text-Embedding über das CLAP-Modell.
+
+        Nutzt ``CLAPEmbedder.get_text_embedding`` — dort sind Tokenisierung,
+        ``get_text_features`` und Normalisierung bereits korrekt gekapselt.
+        Der frühere Weg über ``self.processor``/``self.model`` scheiterte an
+        der Argument-Signatur der Fassade; weil der Arranger das Embedding nur
+        „best effort" einholt, blieb der Ausfall unsichtbar: keine Stems, kein
+        Ton.
+        """
+        # Über die Modell-Fassade gehen (dort sind Mocks injizierbar). Die
+        # Fassade erwartet ``text`` als String, nicht die Tokenizer-Ausgabe.
+        raw_embedding = self.model.get_text_embedding(text=str(prompt))
         return self._normalize_embedding(raw_embedding)
 
     async def analyze_text_prompt(self, prompt: str) -> Dict[str, Any]:
@@ -755,12 +780,29 @@ class NeuroAnalyzer:
             candidate = np.asarray(embedding, dtype=np.float64).ravel()
             if candidate.size != query.size:
                 continue
+
+            # Vollen Pfad ermitteln — ``filename`` allein reicht dem Renderer
+            # nicht. Und Einträge ohne vorhandene Audiodatei fliegen raus:
+            # Sonst wählt der Arranger Katalogeinträge, deren Audio fehlt,
+            # und der Render scheitert mit FileNotFoundError.
+            raw_path = (
+                entry.get("original_path")
+                or entry.get("processed_path")
+                or entry.get("file_path")
+                or entry.get("filename")
+            )
+            if not raw_path:
+                continue
+            resolved = Path(str(raw_path).replace("\\", "/"))
+            if not resolved.exists():
+                continue
+
             similarity = float(
                 cosine_similarity(query.reshape(1, -1), candidate.reshape(1, -1))[0, 0]
             )
             scored.append({
                 "id": entry.get("id"),
-                "file_path": entry.get("filename"),
+                "file_path": str(resolved),
                 "category": entry.get("category"),
                 "bpm": entry.get("bpm"),
                 "duration": entry.get("duration"),

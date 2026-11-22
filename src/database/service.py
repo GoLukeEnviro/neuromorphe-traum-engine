@@ -119,13 +119,20 @@ class DatabaseService:
 
     @staticmethod
     def _stem_to_file_info(stem: Stem) -> Dict[str, Any]:
-        """Wandelt ein Stem-Modell in das von der Suche erwartete Dict um."""
+        """Wandelt ein Stem-Modell in das von der Suche erwartete Dict um.
+
+        ``original_path``/``processed_path`` gehören dazu: Der Renderer braucht
+        einen auflösbaren Dateipfad, nicht nur den Dateinamen.
+        """
         return {
             "id": stem.id,
             "filename": stem.filename,
+            "original_path": stem.original_path,
+            "processed_path": stem.processed_path,
             "category": stem.category,
             "bpm": stem.bpm,
             "duration": stem.duration,
+            "energy_level": stem.energy_level,
             "embedding": stem.audio_embedding,
         }
 

@@ -184,7 +184,22 @@ class TestOwnershipBoundary:
 
         with patch(
             "src.services.renderer.RendererService.render_arrangement"
-        ) as mock_render:
+        ) as mock_render, patch(
+            "src.database.manager.DatabaseManager.get_arrangement"
+        ) as mock_get_arr:
+            # Der Endpunkt rendert nur existierende Arrangements (sonst 404).
+            # Ohne Owner in den Metadaten greift keine Ownership-Sperre — genau
+            # das braucht dieser Test, um den Download zu prüfen.
+            mock_get_arr.return_value = {
+                "id": "any-arrangement",
+                "prompt": "test",
+                "structure": {"sections": []},
+                "stems": [],
+                # Owner = aufrufender Client, damit ``assert_owner`` im
+                # shared-Modus durchlässt. Der Test prüft die Grenze beim
+                # Download, nicht beim Rendern.
+                "metadata": {"owner": "alice"},
+            }
             mock_render.return_value = {
                 "output_path": str(output_file),
                 "duration": 1.0,

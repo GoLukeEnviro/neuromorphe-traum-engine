@@ -83,8 +83,10 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 # Port freigeben
 EXPOSE 8000
 
-# Startup Command
-CMD ["python", "-m", "src.main", "--mode", "prod", "--host", "0.0.0.0", "--port", "8000"]
+# Startup Command — Entrypoint ist uvicorn mit PYTHONPATH=/app/src.
+# Ein ``python -m src.main`` funktioniert nicht: src/main.py definiert nur
+# ``app`` und hat keinen ausführbaren __main__-Block.
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 # Development Stage
 FROM production as development
@@ -110,4 +112,4 @@ ENV DATABASE_ECHO=true
 USER appuser
 
 # Development Command
-CMD ["python", "-m", "src.main", "--mode", "dev", "--host", "0.0.0.0", "--port", "8000", "--log-level", "DEBUG"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "debug"]

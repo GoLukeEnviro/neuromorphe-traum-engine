@@ -277,7 +277,17 @@ class TestRenderingEndpoints:
         arrangement_id = "test_123"
         output_path = temp_dir / "output.wav"
         
-        with patch('src.services.renderer.RendererService.render_arrangement') as mock_render:
+        with patch('src.services.renderer.RendererService.render_arrangement') as mock_render, \
+             patch('src.database.manager.DatabaseManager.get_arrangement') as mock_get_arr:
+            # Der Endpunkt rendert nur existierende Arrangements (sonst 404) —
+            # also muss das Arrangement hier vorhanden sein.
+            mock_get_arr.return_value = {
+                "id": arrangement_id,
+                "prompt": "test",
+                "structure": {"sections": []},
+                "stems": [],
+                "metadata": {},
+            }
             mock_render.return_value = {
                 "output_path": str(output_path),
                 "duration": 180,

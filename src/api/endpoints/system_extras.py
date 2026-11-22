@@ -229,6 +229,10 @@ async def create_arrangement(
     try:
         stored_id = await db_manager.create_arrangement(
             {
+                # ID des Arrangers übernehmen: Sonst speichert die DB unter
+                # einer eigenen UUID, während die API ``arr_...`` zurückgibt —
+                # jeder folgende Render-Aufruf läuft dann in ein 404.
+                "id": result.get("arrangement_id"),
                 "prompt": request.prompt,
                 "duration": request.duration,
                 "genre": request.genre,
@@ -237,7 +241,7 @@ async def create_arrangement(
                 "arrangement_metadata": result.get("metadata"),
             }
         )
-        result["arrangement_id"] = result.get("arrangement_id") or stored_id
+        result["arrangement_id"] = stored_id or result.get("arrangement_id")
     except Exception:  # noqa: BLE001 - Persistenz ist optional
         logger.debug("Arrangement konnte nicht persistiert werden", exc_info=True)
 
@@ -356,12 +360,35 @@ async def render_arrangement(
 ) -> Dict[str, Any]:
     """Rendert ein Arrangement zu einer Audiodatei (nur für den Owner)."""
     arrangement = await db_manager.get_arrangement(arrangement_id)
-    if arrangement is not None:
-        assert_owner((arrangement.get("metadata") or {}).get("owner"), identity)
+    if arrangement is None:
+        raise HTTPException(status_code=404, detail="Arrangement nicht gefunden")
+    assert_owner((arrangement.get("metadata") or {}).get("owner"), identity)
 
     try:
+        # Der Renderer braucht zu jeder Stem-ID einen Dateipfad. Ohne diese
+        # Zuordnung überspringt er jede Sektion stillschweigend und liefert
+        # eine WAV voller Nullen bei HTTP 200.
+        stem_ids = list(arrangement.get("stems") or [])
+        for section in (arrangement.get("structure") or {}).get("sections") or []:
+            for stem_id in section.get("stems") or []:
+                if stem_id not in stem_ids:
+                    stem_ids.append(stem_id)
+
+        stems_data = {}
+        for stem_id in stem_ids:
+            try:
+                stem = await db_manager.get_stem(stem_id)
+            except Exception:  # noqa: BLE001
+                stem = None
+            if not stem:
+                continue
+            path = stem.get("processed_path") or stem.get("original_path")
+            if path:
+                stems_data[stem_id] = {"file_path": path}
+
+        # Der Renderer erwartet das Arrangement-Objekt, nicht seine ID.
         result = await renderer.render_arrangement(
-            arrangement_id, format=request.format
+            arrangement, stems_data=stems_data, format=request.format
         )
     except Exception as exc:  # noqa: BLE001
         logger.exception("Rendering fehlgeschlagen")

@@ -26,7 +26,17 @@ from services.neuro_analyzer import NeuroAnalyzer
 logger = logging.getLogger(__name__)
 
 #: Mindestähnlichkeit, ab der ein Stem übernommen wird.
-MIN_STEM_SIMILARITY = 0.7
+#: Mindest-Ähnlichkeit für die Stem-Auswahl.
+#:
+#: CLAP-Text- und Audio-Embeddings liegen in getrennten Unterräumen
+#: ("modality gap"): Reale Cosine-Werte für brauchbare Treffer liegen bei
+#: 0.05–0.35, nicht bei 0.7. Ein Schwellwert von 0.7 selektierte deshalb
+#: systematisch NICHTS — das Arrangement bekam keine Stems und der Render
+#: erzeugte 179 Sekunden Stille bei HTTP 200.
+#:
+#: Die Auswahl erfolgt daher über die Rangfolge: nach Ähnlichkeit sortiert
+#: und auf ``max_stems`` begrenzt; 0.0 verwirft nur negative Korrelationen.
+MIN_STEM_SIMILARITY = 0.0
 
 #: Standarddauer, wenn keine Dauer angegeben ist.
 DEFAULT_ARRANGEMENT_DURATION = 180.0
@@ -410,6 +420,13 @@ class ArrangerService:
         scored.sort(key=lambda item: (-item[0], -item[1], item[2]))
 
         selected = [dict(item[3]) for item in scored[:max_stems]]
+
+        # Energie je Stem übernehmen. Ohne diesen Schritt haben alle Stems den
+        # Default 0.5, und die spätere Verteilung schickt sie alle in die
+        # mittleren Sektionen — der Drop (Ziel-Energie 1.0) bleibt dann leer.
+        for stem in selected:
+            if stem.get("energy") is None:
+                stem["energy"] = stem.get("energy_level") or 0.5
         selected.sort(key=lambda stem: float(stem.get('similarity', 0.0)), reverse=True)
         return selected
 
@@ -574,12 +591,33 @@ class ArrangerService:
 
         assigned: List[List[Any]] = [[] for _ in optimized]
 
-        # Energetischste Stems zuerst, dann den energetisch passendsten Slot.
-        ordering = sorted(
+        # Erste Runde: jede Sektion bekommt einen Stem, bevor irgendeine einen
+        # zweiten erhält. Sonst frisst die greedy-Verteilung alle Stems in den
+        # mittleren Sektionen und der Drop bleibt leer — die Hauptsektion eines
+        # Techno-Tracks wäre stumm.
+        # Reihenfolge: energiereichste Sektion zuerst, energiereichster Stem
+        # zuerst.
+        remaining = sorted(
             range(len(normalized)),
             key=lambda index: (-normalized[index]['energy'], index),
         )
-        for index in ordering:
+        section_priority = sorted(
+            range(len(optimized)),
+            key=lambda i: (-targets[i], i),
+        )
+        for section_index in section_priority:
+            if not remaining or capacities[section_index] <= 0:
+                continue
+            # Passendsten verbleibenden Stem für diese Sektion wählen.
+            best = min(
+                remaining,
+                key=lambda idx: (abs(targets[section_index] - normalized[idx]['energy']), idx),
+            )
+            assigned[section_index].append(normalized[best]['id'])
+            remaining.remove(best)
+
+        # Zweite Runde: Rest greedy auf freie Plätze verteilen.
+        for index in remaining:
             stem = normalized[index]
             section_order = sorted(
                 range(len(optimized)),
