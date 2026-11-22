@@ -858,6 +858,18 @@ class RendererService:
             )
             effects_applied.append({"section": "master", "stem_id": None, "effects": dict(master_effects["normalize"])})
 
+        # Default-Mastering: Ohne explizite master_effects wurde der Mix bisher
+        # ungebremst exportiert und clippte (peak 1.0, hörbare Verzerrung).
+        # Ein Peak-Limiter auf -1 dBFS hält das Signal im gültigen Bereich,
+        # ohne die Lautheit zu opfern.
+        if not master_effects:
+            mix = self._ensure_stereo(
+                await _maybe_await(self._apply_limiter(mix, threshold=-1.0))
+            )
+            effects_applied.append(
+                {"section": "master", "stem_id": None, "effects": {"limiter": {"threshold": -1.0}}}
+            )
+
         # Export
         if output_path is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
