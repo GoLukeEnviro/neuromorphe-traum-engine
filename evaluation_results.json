@@ -1,6 +1,6 @@
 {
   "topk": 5,
-  "precision": 0.48,
+  "precision": 0.49,
   "rows": [
     {
       "prompt": "dark driving kick",
@@ -23,8 +23,8 @@
       "expected": [
         "kick"
       ],
-      "found": 3,
-      "precision": 0.6
+      "found": 4,
+      "precision": 0.8
     },
     {
       "prompt": "tight closed hihat",
