@@ -180,11 +180,26 @@ class DatabaseService:
         categories = await self._run_sync(StemCRUD.get_stems)
 
         category_dist = raw.get("category_distribution", {}) or {}
+
+        # Nur Stems, die tatsächlich durchsuchbar sind: mit Embedding und mit
+        # vorhandener Audiodatei. Die Zahlen müssen zu dem passen, was die
+        # Suche liefert — sonst zeigt das Frontend 116 Dateien bei 39 Treffern.
+        usable = [
+            stem
+            for stem in categories
+            if getattr(stem, "audio_embedding", None)
+            and getattr(stem, "processing_status", None) != "missing_audio"
+        ]
+        usable_dist: Dict[Any, int] = {}
+        for stem in usable:
+            usable_dist[stem.category] = usable_dist.get(stem.category, 0) + 1
+
         return {
-            "total_files": raw.get("total_stems", 0) or 0,
+            "total_files": len(usable),
+            "total_embeddings": len(usable),
             "categories": [
                 {"category": name, "count": count}
-                for name, count in sorted(category_dist.items())
+                for name, count in sorted(usable_dist.items())
                 if name is not None
             ],
             "bpm_range": None,

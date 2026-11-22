@@ -481,6 +481,30 @@ async def download_render(
     )
 
 
+@router.get("/api/v1/stems/{stem_id}/audio")
+async def stream_stem_audio(
+    stem_id: str,
+    db_manager=Depends(get_db_manager),
+):
+    """Liefert die Audiodatei eines Stems aus.
+
+    Die Such-API verweist per ``file_path`` auf diesen Endpunkt. Ohne ihn sind
+    alle Treffer-Links tot: Die Stems liegen verstreut (Bibliothek, Uploads),
+    ein statischer ``/audio_files``-Mount würde die Pfade nicht treffen.
+    """
+    stem = await db_manager.get_stem(stem_id)
+    if stem is None:
+        raise HTTPException(status_code=404, detail="Stem not found")
+
+    raw_path = stem.get("processed_path") or stem.get("original_path")
+    if not raw_path or not Path(str(raw_path)).exists():
+        raise HTTPException(status_code=404, detail="Audio file not found")
+
+    suffix = Path(str(raw_path)).suffix.lstrip(".").lower() or "wav"
+    media_type = "audio/mpeg" if suffix == "mp3" else f"audio/{suffix}"
+    return FileResponse(str(raw_path), media_type=media_type, filename=Path(str(raw_path)).name)
+
+
 # ---------------------------------------------------------------------------
 # Stems (Upload / Suche / Update / Delete)
 # ---------------------------------------------------------------------------

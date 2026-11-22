@@ -96,7 +96,7 @@ class SearchService:
                     category=file_info.get('category'),
                     bpm=int(round(raw_bpm)) if raw_bpm else None,
                     duration=file_info.get('duration'),
-                    file_path=f"/audio_files/{stem_id}.{suffix}"
+                    file_path=f"/api/v1/stems/{stem_id}/audio"
                 )
                 results.append(result)
             
@@ -207,7 +207,7 @@ class SearchService:
                     category=file_info.get('category'),
                     bpm=int(round(raw_bpm)) if raw_bpm else None,
                     duration=file_info.get('duration'),
-                    file_path=f"/audio_files/{stem_id}.{suffix}"
+                    file_path=f"/api/v1/stems/{stem_id}/audio"
                 )
                 results.append(result)
             
@@ -228,9 +228,11 @@ class SearchService:
         """Get search statistics"""
         try:
             stats = await self.db_service.get_search_statistics()
-            
-            # Count embeddings
-            embedding_count = len(list(self.embedding_dir.glob("*.npy")))
+
+            # Embedding-Zahl aus der DB, nicht aus .npy-Dateien: Seit die
+            # Embeddings in der Spalte audio_embedding liegen, gibt es keine
+            # .npy-Dateien mehr — der Zähler stand deshalb dauerhaft auf 0.
+            embedding_count = int(stats.get("total_embeddings", 0) or 0)
             
             # Build category stats
             category_stats = []
