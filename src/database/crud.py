@@ -6,6 +6,7 @@ Diese Datei enthält alle Create, Read, Update, Delete-Operationen für die Date
 import logging
 from typing import List, Optional, Dict, Any, Union
 from datetime import datetime, timedelta
+from uuid import uuid4
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, desc, asc, func, text
 import numpy as np
@@ -25,7 +26,45 @@ class StemCRUD:
     
     @staticmethod
     def create_stem(db: Session, stem_data: Dict[str, Any]) -> Stem:
-        """Erstellt einen neuen Stem"""
+        """Erstellt einen neuen Stem.
+
+        Räumt zwei Stolpersteine aus, die den Upload-Pfad blockierten:
+
+        1. Unbekannte Felder (z. B. ``title``/``description`` aus ``StemCreate``)
+           werden verworfen — sonst scheitert ``Stem(**stem_data)`` mit
+           ``TypeError``.
+        2. NOT-NULL-Spalten ohne Server-Default (``original_path``,
+           ``filename``, ``file_hash``, ``source``, ``processing_status``)
+           bekommen hier dieselben Defaults wie im Manager-Pfad. Sonst
+           scheitert die Einfügung an ``IntegrityError``.
+        """
+        known = {c.key for c in Stem.__table__.columns}
+        unknown = sorted(set(stem_data) - known)
+        if unknown:
+            logger.warning("Unbekannte Stem-Felder verworfen: %s", ", ".join(unknown))
+            stem_data = {k: v for k, v in stem_data.items() if k in known}
+        else:
+            stem_data = dict(stem_data)
+
+        stem_data.pop("id", None)
+
+        # ``model_dump()`` liefert alle Schema-Felder — auch die mit ``None``.
+        # ``setdefault`` greift dort nicht, weil der Key existiert. Deshalb
+        # explizit auf ``None`` prüfen.
+        def _fill(key: str, default: Any) -> None:
+            if stem_data.get(key) is None:
+                stem_data[key] = default
+
+        _fill("filename", stem_data.get("original_path") or "unknown.wav")
+        _fill("original_path", stem_data.get("filename"))
+        _fill("file_hash", uuid4().hex + uuid4().hex)
+        _fill("source", "original")
+        _fill("processing_status", "completed")
+        _fill("duration", 0.0)
+        _fill("sample_rate", 44100)
+        _fill("channels", 2)
+        _fill("file_size", 0)
+
         try:
             stem = Stem(**stem_data)
             db.add(stem)

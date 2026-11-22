@@ -63,6 +63,11 @@ STEM_FIELD_ALIASES: Dict[str, str] = {
     "tags": "manual_tags",
     "features": "neural_features",
     "embeddings": "audio_embedding",
+    # ``StemCreate`` (API-Schema) führt ``title`` als eigenes Feld, das ORM
+    # kennt nur ``filename``. Ohne diese Abbildung scheitert ``Stem(**data)``
+    # mit ``TypeError: 'title' is an invalid keyword argument for Stem`` und
+    # damit der komplette Upload-Pfad.
+    "title": "filename",
 }
 
 #: Historische Feldnamen -> Spalten des echten Schemas (generated_tracks).
@@ -740,6 +745,20 @@ class DatabaseManager:
         String zurückgegeben (historischer Vertrag der Aufrufer).
         """
         data = self._normalize_stem_fields(stem_data)
+
+        # Felder verwerfen, die das ORM-Modell nicht kennt. ``StemCreate`` und
+        # ältere Aufrufer reichen gelegentlich Schema-Felder durch (z. B.
+        # ``description``); ``Stem(**data)`` würde daran mit ``TypeError``
+        # scheitern und den gesamten Upload blockieren.
+        known_columns = {c.key for c in Stem.__table__.columns}
+        unknown = sorted(set(data) - known_columns)
+        if unknown:
+            self.logger.warning(
+                "Unbekannte Stem-Felder verworfen: %s", ", ".join(unknown)
+            )
+            for key in unknown:
+                data.pop(key, None)
+
         data.pop("id", None)
         data.setdefault("source", "original")
         data.setdefault("processing_status", "completed")

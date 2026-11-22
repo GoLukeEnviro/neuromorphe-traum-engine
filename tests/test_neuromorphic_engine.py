@@ -75,25 +75,28 @@ def test_database_service_reads_are_bound_to_sandbox(sandbox_root: Path):
     asyncio.run(scenario())
 
 
-@pytest.mark.xfail(
-    raises=TypeError,
-    strict=True,
-    reason=(
-        "Bekannter Schema-Drift: StemCreate enthält 'title'/'key', das ORM-Modell "
-        "Stem nicht (dort 'musical_key'). StemCRUD.create_stem reicht die Felder "
-        "ungefiltert an Stem(**...) weiter — insert_stem ist dadurch funktionsunfähig. "
-        "Nicht Teil dieses Auftrags (Test-Isolation), aber hier sichtbar statt still grün."
-    ),
-)
-def test_database_service_insert_stem_is_blocked_by_schema_drift():
-    """Dokumentiert den Defekt: ``insert_stem`` scheitert an unbekannten Feldern."""
+def test_database_service_insert_stem_ignores_unknown_schema_fields():
+    """``insert_stem`` verkraftet Schema-Felder, die das ORM nicht kennt.
+
+    ``StemCreate`` führt ``title`` und ``description``; das ORM-Modell ``Stem``
+    kennt nur ``filename``. Früher reichte ``StemCRUD.create_stem`` die Felder
+    ungefiltert an ``Stem(**...)`` weiter, was mit ``TypeError`` scheiterte und
+    den gesamten Upload-Pfad lahmlegte. Jetzt werden unbekannte Felder
+    verworfen (mit Warnung), statt die Einfügung zu blockieren.
+    """
     service = DatabaseService()
 
     async def scenario():
         created = await service.insert_stem(
-            StemCreate(filename="test_kick_engine.wav", category="kick")
+            StemCreate(
+                filename="test_kick_engine.wav",
+                title="Kick Engine",
+                description="dunkel und trocken",
+                category="kick",
+            )
         )
-        assert created is not None
+        assert created is not None, "insert_stem hat keinen Stem zurückgegeben"
+        assert created.filename == "test_kick_engine.wav"
 
     try:
         asyncio.run(scenario())
