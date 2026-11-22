@@ -348,6 +348,12 @@ class LoggerManager:
         # Transformers Logger (für CLAP)
         transformers_logger: logging.Logger = logging.getLogger('transformers')
         transformers_logger.setLevel(logging.WARNING)
+
+        # HTTP-/Hub-Bibliotheken: Sie protokollieren jeden einzelnen Request
+        # (ein CLAP-Ladevorgang erzeugt ~30 Zeilen). Auf INFO macht das die
+        # Anwendungslogs unbrauchbar.
+        for noisy in ('httpx', 'urllib3', 'huggingface_hub', 'filelock', 'numba'):
+            logging.getLogger(noisy).setLevel(logging.WARNING)
         
         # Librosa Logger
         librosa_logger: logging.Logger = logging.getLogger('librosa')
