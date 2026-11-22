@@ -1,0 +1,166 @@
+{
+  "topk": 5,
+  "precision": 0.48,
+  "rows": [
+    {
+      "prompt": "dark driving kick",
+      "expected": [
+        "kick"
+      ],
+      "found": 4,
+      "precision": 0.8
+    },
+    {
+      "prompt": "punchy techno kick drum",
+      "expected": [
+        "kick"
+      ],
+      "found": 5,
+      "precision": 1.0
+    },
+    {
+      "prompt": "deep sub bass kick",
+      "expected": [
+        "kick"
+      ],
+      "found": 3,
+      "precision": 0.6
+    },
+    {
+      "prompt": "tight closed hihat",
+      "expected": [
+        "hihat"
+      ],
+      "found": 4,
+      "precision": 0.8
+    },
+    {
+      "prompt": "open hihat groove",
+      "expected": [
+        "hihat"
+      ],
+      "found": 2,
+      "precision": 0.4
+    },
+    {
+      "prompt": "metallic percussion",
+      "expected": [
+        "percussion"
+      ],
+      "found": 2,
+      "precision": 0.4
+    },
+    {
+      "prompt": "wooden percussion hit",
+      "expected": [
+        "percussion"
+      ],
+      "found": 3,
+      "precision": 0.6
+    },
+    {
+      "prompt": "acid bassline",
+      "expected": [
+        "bass"
+      ],
+      "found": 0,
+      "precision": 0.0
+    },
+    {
+      "prompt": "deep rolling sub bass",
+      "expected": [
+        "bass"
+      ],
+      "found": 0,
+      "precision": 0.0
+    },
+    {
+      "prompt": "dark atmospheric pad",
+      "expected": [
+        "atmosphere"
+      ],
+      "found": 2,
+      "precision": 0.4
+    },
+    {
+      "prompt": "eerie background texture",
+      "expected": [
+        "atmosphere"
+      ],
+      "found": 1,
+      "precision": 0.2
+    },
+    {
+      "prompt": "industrial clap",
+      "expected": [
+        "snare"
+      ],
+      "found": 0,
+      "precision": 0.0
+    },
+    {
+      "prompt": "sharp snare hit",
+      "expected": [
+        "snare"
+      ],
+      "found": 2,
+      "precision": 0.4
+    },
+    {
+      "prompt": "hypnotic synth stab",
+      "expected": [
+        "synth"
+      ],
+      "found": 0,
+      "precision": 0.0
+    },
+    {
+      "prompt": "chord stab techno",
+      "expected": [
+        "synth"
+      ],
+      "found": 2,
+      "precision": 0.4
+    },
+    {
+      "prompt": "four on the floor drum loop",
+      "expected": [
+        "loop"
+      ],
+      "found": 4,
+      "precision": 0.8
+    },
+    {
+      "prompt": "134 bpm techno loop",
+      "expected": [
+        "loop"
+      ],
+      "found": 5,
+      "precision": 1.0
+    },
+    {
+      "prompt": "hard warehouse kick",
+      "expected": [
+        "kick"
+      ],
+      "found": 4,
+      "precision": 0.8
+    },
+    {
+      "prompt": "clanging metal hit",
+      "expected": [
+        "percussion"
+      ],
+      "found": 3,
+      "precision": 0.6
+    },
+    {
+      "prompt": "slow evolving drone",
+      "expected": [
+        "atmosphere"
+      ],
+      "found": 2,
+      "precision": 0.4
+    }
+  ]
+}

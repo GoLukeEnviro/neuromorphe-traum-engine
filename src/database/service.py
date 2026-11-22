@@ -157,7 +157,13 @@ class DatabaseService:
             bpm_max=bpm_max,
             audio_embedding_is_not_null=True,
         )
-        return [self._stem_to_file_info(s) for s in stems]
+        # Einträge ohne vorhandene Audiodatei sind für die Suche wertlos: Sie
+        # liefern Treffer, die man nicht anhören und nicht rendern kann.
+        return [
+            self._stem_to_file_info(stem)
+            for stem in stems
+            if getattr(stem, "processing_status", None) != "missing_audio"
+        ]
 
     async def get_audio_files_by_ids(self, file_ids: List[Any]) -> List[Dict[str, Any]]:
         """Liefert Stem-Infos für eine explizite Liste von IDs."""

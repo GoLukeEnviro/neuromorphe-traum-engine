@@ -49,6 +49,7 @@ EVAL_SET = [
 
 async def run(topk: int) -> None:
     from search.service import SearchService
+    from search.schemas import SearchRequest
 
     service = SearchService()
     rows = []
@@ -60,10 +61,16 @@ async def run(topk: int) -> None:
 
     for prompt, expected in EVAL_SET:
         try:
-            result = await service.search_by_text(prompt, limit=topk)
-            items = getattr(result, "results", result) or []
+            result = await service.search_by_text(
+                SearchRequest(query=prompt, limit=topk)
+            )
+            items = getattr(result, "results", None) or []
+            items = [
+                item.model_dump() if hasattr(item, "model_dump") else item
+                for item in items
+            ]
         except Exception as exc:
-            print(f"{prompt:34} FEHLER: {exc}")
+            print(f"{prompt:34} FEHLER: {type(exc).__name__}: {str(exc)[:60]}")
             continue
 
         found = 0
