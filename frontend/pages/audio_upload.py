@@ -8,7 +8,7 @@ import json
 # Page configuration
 supported_formats = ['wav', 'mp3', 'flac', 'ogg', 'aiff']
 max_file_size_mb = 50
-backend_url = st.session_state.get('backend_url', 'http://localhost:8508')
+backend_url = st.session_state.get('backend_url', 'http://localhost:8000')
 
 def check_backend_connection() -> bool:
     """Check if backend is reachable"""

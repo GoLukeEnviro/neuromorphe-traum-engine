@@ -6,7 +6,7 @@ import time
 from typing import Dict, Any, Optional
 
 # Page configuration
-backend_url = st.session_state.get('backend_url', 'http://localhost:8508')
+backend_url = st.session_state.get('backend_url', 'http://localhost:8000')
 default_settings = {
     'backend_url': 'http://localhost:8000',
     'connection_timeout': 30,

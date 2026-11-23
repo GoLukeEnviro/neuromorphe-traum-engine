@@ -5,7 +5,7 @@ import time
 from typing import List, Dict, Any, Optional
 
 # Page configuration
-backend_url = st.session_state.get('backend_url', 'http://localhost:8508')
+backend_url = st.session_state.get('backend_url', 'http://localhost:8000')
 
 search_examples = [
     "energetic techno with heavy bass",

@@ -5,8 +5,8 @@ import os
 import pandas as pd
 from typing import List, Dict, Any, Optional
 
-# Page configuration
-backend_url = st.session_state.get('backend_url', 'http://localhost:8508')
+# Page configuration — Standard-Port des Backends ist 8000 (uvicorn).
+backend_url = st.session_state.get('backend_url', 'http://localhost:8000')
 results_per_page = 10
 
 def load_all_stems():
@@ -329,6 +329,24 @@ def render_results_table(page_results: List[Dict[str, Any]], start_idx: int):
         use_container_width=True,
         hide_index=True
     )
+
+    # Audio-Wiedergabe: Ohne sie ist eine Sample-Suche blind — man sieht
+    # Treffer, kann sie aber nicht beurteilen. Der Backend-Endpunkt liefert
+    # die Datei anhand der Stem-ID aus.
+    st.subheader("Anhören")
+    for result in page_results:
+        stem_id = result.get("id")
+        if stem_id is None:
+            continue
+        label = f"{result.get('category') or '?'} · {result.get('filename', 'Unknown')}"
+        similarity = result.get("similarity_score")
+        if similarity is not None:
+            label += f" · {float(similarity):.3f}"
+        st.caption(label)
+        st.audio(
+            f"{backend_url.rstrip('/')}/api/v1/stems/{stem_id}/audio",
+            format="audio/wav",
+        )
     
     # Action buttons for selected rows
     st.subheader("Actions")
